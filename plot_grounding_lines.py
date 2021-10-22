@@ -16,6 +16,7 @@ from netCDF4 import Dataset
 from optparse import OptionParser
 import matplotlib.pyplot as plt
 import matplotlib as mpl
+from matplotlib.pyplot import cm
 
 rhoi = 910.0
 rhosw = 1028.0
@@ -45,21 +46,23 @@ groundingLineValue = 256
 # Currently this means plotting all time levels on the same
 # axes, which may or may not work, depending on application.
 # This could definitely be improved.
-fig, axs = plt.subplots(2, 3, sharex=True, sharey=True) 
+fig, axs = plt.subplots(2, 3, sharex=True, sharey=True, figsize=(12,5))
 
 
 # Plot bed topo and initial extent on all axes using first file
 bedPlot = []
 initExtentPlot = []
+if '.nc' not in runs[0]:
+    runs[0] = runs[0] + '/output.nc'
 f = Dataset(runs[0], 'r')
-xCell = f.variables["xCell"][:]
-yCell = f.variables["yCell"][:]
+xCell = f.variables["xCell"][:] / 1000.
+yCell = f.variables["yCell"][:] / 1000.
 bed = f.variables["bedTopography"][:]
 cellMask = f.variables["cellMask"][:]
 initialExtentMask = (cellMask & initialExtentValue) // initialExtentValue
 
 for ax in axs.ravel(): 
-    bedPlot.append(ax.tricontourf(xCell, yCell, bed[0,:], levels=100, cmap='BrBG'))
+    bedPlot.append(ax.tricontourf(xCell, yCell, bed[0,:], levels=100, cmap='BrBG', vmin=-420., vmax=780.))
     initExtentPlot.append(ax.tricontour(xCell, yCell, initialExtentMask[0,:], colors='black'))
 f.close()
 
@@ -80,7 +83,7 @@ def get_line_color(run):
             highCalving = 'VM160'
     
     if '2017calvingFront' in run or 'calvingVelocityData' in run:
-        lineColor = 'tab:grey'
+        lineColor = 'lightgrey'
     elif highCalving in run:
         lineColor = 'tab:purple'
     elif medCalving in run:
@@ -135,11 +138,20 @@ for run in runs:
         timeLev = int(timeLev) #these are strings for some reason; make int to index
         axs[row,col].tricontour(xCell, yCell, groundingLineMask[timeLev, :], 
            levels=[0.9999], colors=get_line_color(run), linestyles='solid')
-        
+        axs[row,col].set_aspect('equal')
 
         
 # Customize plots
-axs[0,0].set_ylim(top=-1020000, bottom = -1120000) # hard-code limits for now
-axs[0,0].set_xlim(left=-425000, right=-300000)
+axs[0,0].set_title('MIROC5')
+axs[0,1].set_title('HadGEM2')
+axs[0,2].set_title('CNRM-CM6')
+axs[0,0].set_ylim(top=-1020, bottom = -1120) # hard-code limits for now
+axs[0,0].set_xlim(left=-425, right=-300)
+axs[0,0].set_ylabel('km')
+axs[1,0].set_ylabel('km')
+axs[1,1].set_xlabel('km')
+fig.subplots_adjust(hspace=0.1, wspace=0.2)
+cbar = plt.colorbar(bedPlot[0], ax=axs[:,:], shrink=0.5, label="Bed elevation (m)")
 
-plt.show()
+#plt.show()
+fig.savefig('groundingLines2100', dpi=400, bbox_inches='tight')
