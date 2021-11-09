@@ -58,7 +58,7 @@ colorlist = list(colormap.items())
 #Get units
 if controlFiles:
     f = Dataset(controlFiles[0], 'r')
-    units = f.variables[options.variableName].units
+    units = f.variables[variableName[0]].units
     f.close()
 else:
     units = options.units
@@ -68,12 +68,11 @@ linestyleList = ['solid', 'dashed', 'dotted', 'dashdot']
 linestyleIndex = 0 # initialize for loop
 
 # create axes to plot into
-varFig, varAx = plt.subplots(1,3, sharey=True, sharex=True)
+varFig, varAx = plt.subplots(len(variableName), 3, sharey='row', sharex=True)
 #ratioFig, ratioAx = plt.subplots(1,1)
-varAx[0].grid()
-varAx[1].grid()
-varAx[2].grid()
-#ratioAx.grid()
+for ax in varAx.ravel():
+    ax.grid('on')
+
 plotLines = [] #empty list to fill with lines
 plotLineNames = [] #empty list to fill with filenames
 plotBounds = []
@@ -121,7 +120,7 @@ def plotEnsembleBounds(boundsDir, controlFile=None):
     
     return plotBounds, plotBoundNames
 
-def plotEnsemble(ensDir, controlFile=None):
+def plotEnsemble(ensDir, row, variable, controlFile=None):
 #    print("Reading and plotting file: {}".format(fname))
     colorIndex = 0 #initialize index to loop through color list
     ensembleFiles = sorted(os.listdir(ensDir)) # get filenames in directory
@@ -134,29 +133,29 @@ def plotEnsemble(ensDir, controlFile=None):
             
             # get units
             try: 
-                units = f.variables[options.variableName].units
+                units = f.variables[variable].units
             except:
                 units = 'm^3'
         
-            var2plot = f.variables[options.variableName][:] \
+            var2plot = f.variables[variable][:] \
                          #- f.variables[options.variableName][0]
                          
             # subtract off variables from control run
-            if controlFile:
+            if controlFile and variable == 'volumeAboveFloatation':
                 #interpolate control run onto ensemble member time vector
                 controlData = Dataset(controlFile, 'r')
                 controlInterp = np.interp(yr, controlData.variables['daysSinceStart'][:]/365.0, 
-                               controlData.variables[options.variableName][:])
+                               controlData.variables[variable][:])
                 
                 var2plot = var2plot - controlInterp #+ controlInterp[0]
 
 
             if 'CNRM' in ensembleMember:
-                plotAx = varAx[2]
+                plotAx = varAx[row,2]
             elif 'HadGEM2' in ensembleMember:
-                plotAx = varAx[1]
+                plotAx = varAx[row,1]
             elif 'MIROC5' in ensembleMember:
-                plotAx = varAx[0]
+                plotAx = varAx[row,0]
                 
             tmpLine, = plotAx.plot(yr+2007., var2plot, 
                                    label=ensembleMember)
@@ -177,40 +176,39 @@ controlIndex=0
 boundsIndex=0
 controlFile=None
 
-
-
 for directory in ensembleDirs:
     print("Ensemble {}".format(directory))
-    if controlFiles:
-        controlFile=controlFiles[controlIndex]
-    if boundsDirs and boundsIndex <= len(boundsDirs)-1:
-        plotEnsembleBounds(boundsDirs[boundsIndex], controlFile)
-    plotLines, plotLineNames = plotEnsemble(directory, controlFile)
+    for row,variable in enumerate(variableName):
+        if controlFiles:
+            controlFile=controlFiles[controlIndex]
+        if boundsDirs and boundsIndex <= len(boundsDirs)-1:
+            plotEnsembleBounds(boundsDirs[boundsIndex], controlFile)
+        plotLines, plotLineNames = plotEnsemble(directory, row, variable, controlFile)
+        if variable == "volumeAboveFloatation":
+            addSeaLevAx(varAx[row,-1])
+        if variable == 'volumeAboveFloatation':
+            varAx[row, 0].set_ylabel('Total change in volume above\nfloatation (10$^{12}$ m$^3$)', fontsize=16)
+        else:
+            varAx[row, 0].set_ylabel('Total {} (${}$)'.format(variable, units), fontsize=16)
+
     controlIndex += 1
     linestyleIndex += 1
     boundsIndex += 1
-    
-if options.variableName == "volumeAboveFloatation":
-    addSeaLevAx(varAx[-1])
 
-varAx[0].set_xlabel('Year', fontsize=16)
-varAx[0].set_title('MIROC5')
-varAx[1].set_xlabel('Year', fontsize=16)
-varAx[1].set_title('HadGEM2')
-varAx[2].set_xlabel('Year', fontsize=16)
-varAx[2].set_title('CNRM')
+varAx[-1,0].set_xlabel('Year', fontsize=16)
+varAx[0,0].set_title('MIROC5')
+varAx[-1,1].set_xlabel('Year', fontsize=16)
+varAx[0,1].set_title('HadGEM2')
+varAx[-1,2].set_xlabel('Year', fontsize=16)
+varAx[0,2].set_title('CNRM')
 
-if options.variableName == 'volumeAboveFloatation':
-    varAx[0].set_ylabel('Total change in volume above\nfloatation (10$^{12}$ m$^3$)', fontsize=16)
-else:
-    varAx[0].set_ylabel('Total change in\n{} (${}$)'.format(options.variableName, units), fontsize=16)
 
 #varAx.legend()
 varFig.tight_layout()
 #varAx.set_ylim(bottom=-7e12, top=0)
-varAx[0].set_xlim(left=2007, right=2100.)
-varAx[1].set_xlim(left=2007, right=2100.)
-varAx[2].set_xlim(left=2007, right=2100.)
+varAx[0,0].set_xlim(left=2007, right=2100.)
+varAx[0,1].set_xlim(left=2007, right=2100.)
+varAx[0,2].set_xlim(left=2007, right=2100.)
 #ratioAx.set_xlim(left=0, right=100.)
 #set a reasonable fontsize
 plt.rcParams.update({'font.size': 16})
@@ -330,8 +328,8 @@ for bound, boundName in zip(plotBounds, plotBoundNames):
         #bound.set_hatch('xxxxxx')
         bound.set_alpha(0.6)
         
-varFig.set_size_inches(15, 5)
-varFig.subplots_adjust(wspace=0.15)
+varFig.set_size_inches(15, 7 * len(variableName))
+varFig.subplots_adjust(wspace=0.15, hspace=0.2)
 
 plt.show()
 #varFig.savefig('/Users/trevorhillebrand/Documents/mpas/MALI_output/Humboldt_melt_calv_ensemble/Humboldt_only_runs/projections/SL_contributions.png', dpi=300)
