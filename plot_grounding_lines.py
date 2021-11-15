@@ -24,10 +24,11 @@ print("** Gathering information.  (Invoke with --help for more details. All argu
 parser = OptionParser(description=__doc__)
 parser.add_option("-r", dest="runs", help="path to .nc file or dir containing output.nc file (strings separated by commas; no spaces)", default=None, metavar="FILENAME")
 parser.add_option("-t", dest="timeLevels", help="integer time levels at which to plot (int separated by commas; no spaces)", default=-1, metavar="FILENAME")
-
+parser.add_option("-b", dest="bedTopo", help="path to gridded bed topography data product for plotting", default='/global/cfs/cdirs/piscees/GIS/BedMachineGreenland-2021-04-20_Humboldt.nc', metavar="FILENAME")
 options, args = parser.parse_args()
 #if type(options.runs) is list: 
 runs = options.runs.split(',') # split run directories into list
+bedTopoFile = options.bedTopo
 #else:
 #    runs = [options.runs] # Kind of cludgey, but allows for consistent indexing in loop
     
@@ -42,27 +43,46 @@ dynamicValue = 2
 floatValue = 4
 groundingLineValue = 256
 
+# Hack for asymmetric colorbap. Matplotlib is dumb.
+# set the colormap and centre the colorbar
+class MidpointNormalize(mpl.colors.Normalize):
+    """Normalise the colorbar."""
+    def __init__(self, vmin=None, vmax=None, midpoint=None, clip=False):
+        self.midpoint = midpoint
+        mpl.colors.Normalize.__init__(self, vmin, vmax, clip)
+
+    def __call__(self, value, clip=None):
+        x, y = [self.vmin, self.midpoint, self.vmax], [0, 0.5, 1]
+        return np.ma.masked_array(np.interp(value, x, y), np.isnan(value))
+
 # Use rows for q values, columns for climate forcings.
 # Currently this means plotting all time levels on the same
 # axes, which may or may not work, depending on application.
 # This could definitely be improved.
-fig, axs = plt.subplots(2, 3, sharex=True, sharey=True, figsize=(12,5))
-
+fig, axs = plt.subplots(2, 3, sharex=True, sharey=True, figsize=(9,6))
 
 # Plot bed topo and initial extent on all axes using first file
 bedPlot = []
+bedTopo = Dataset(bedTopoFile, 'r')
+bed = bedTopo.variables["topg"][:]
+bedx = bedTopo.variables["x1"][:] / 1000.
+bedy = bedTopo.variables["y1"][:] / 1000.
+bedX, bedY = np.meshgrid(bedx, bedy)
+bedTopo.close()
+
 initExtentPlot = []
 if '.nc' not in runs[0]:
     runs[0] = runs[0] + '/output.nc'
 f = Dataset(runs[0], 'r')
 xCell = f.variables["xCell"][:] / 1000.
 yCell = f.variables["yCell"][:] / 1000.
-bed = f.variables["bedTopography"][:]
 cellMask = f.variables["cellMask"][:]
 initialExtentMask = (cellMask & initialExtentValue) // initialExtentValue
 
+bedMin = -420.
+bedMax = 780.
 for ax in axs.ravel(): 
-    bedPlot.append(ax.tricontourf(xCell, yCell, bed[0,:], levels=100, cmap='BrBG', vmin=-420., vmax=780.))
+    bedPlot.append(ax.pcolormesh(bedX, bedY, bed, cmap='BrBG', vmin=bedMin, vmax=bedMax, norm=MidpointNormalize(bedMin, bedMax, 0.)))
     initExtentPlot.append(ax.tricontour(xCell, yCell, initialExtentMask[0,:], colors='black'))
 f.close()
 
@@ -149,9 +169,11 @@ axs[0,0].set_ylim(top=-1020, bottom = -1120) # hard-code limits for now
 axs[0,0].set_xlim(left=-425, right=-300)
 axs[0,0].set_ylabel('km')
 axs[1,0].set_ylabel('km')
-axs[1,1].set_xlabel('km')
-fig.subplots_adjust(hspace=0.1, wspace=0.2)
-cbar = plt.colorbar(bedPlot[0], ax=axs[:,:], shrink=0.5, label="Bed elevation (m)")
+axs[1,0].set_xlabel('km')
+axs[1,2].set_xlabel('km')
+axs[1,1].set_xticklabels(['','-400', '-375', '-350', '-325', '-300'])
+fig.subplots_adjust(hspace=0.1, wspace=0.)
+cbar = plt.colorbar(bedPlot[0], ax=axs[:,:], shrink=0.4, label="Bed elevation (m)", orientation='horizontal', pad=0.08)
 
 #plt.show()
 fig.savefig('groundingLines2100', dpi=400, bbox_inches='tight')
