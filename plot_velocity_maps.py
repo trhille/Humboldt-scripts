@@ -28,6 +28,7 @@ parser = OptionParser(description=__doc__)
 parser.add_option("-r", dest="runs", help="path to .nc file or dir containing output.nc file (strings separated by commas; no spaces)", default=None, metavar="FILENAME")
 parser.add_option("-t", dest="timeLevels", help="integer time levels at which to plot (int separated by commas; no spaces)", default=-1, metavar="FILENAME")
 parser.add_option("-b", dest="bedTopo", help="path to gridded bed topography data product for plotting", default='/global/cfs/cdirs/piscees/GIS/BedMachineGreenland-2021-04-20_Humboldt.nc', metavar="FILENAME")
+parser.add_option("-s", dest="saveName", help="filename for saving. If empty or None, will plot to screen instead of saving.", default=None, metavar="FILENAME")
 options, args = parser.parse_args()
 runs = options.runs.split(',') # split run directories into list
 bedTopoFile = options.bedTopo
@@ -208,5 +209,7 @@ cbar1 = Colorbar(ax=cbarAx1, mappable=spdPlot[0], orientation='vertical',
 cbar2 = Colorbar(ax=cbarAx2, mappable=bedPlot[0], orientation='vertical',
                  label="Bed elevation (m)")
 
-plt.show()
-#fig.savefig('speed2100_highCalving', dpi=400, bbox_inches='tight')
+if options.saveName is None:
+    plt.show()
+else:
+    fig.savefig(options.saveName, dpi=400, bbox_inches='tight')
