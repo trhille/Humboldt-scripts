@@ -180,7 +180,7 @@ for run in runs:
     axs[index].tricontour(xCell, yCell, groundingLineMask[timeLev, :], 
                           levels=[0.9999], colors=get_line_color(run), linestyles='solid')
     spdPlot.append(axs[index].tripcolor(xCell, yCell, 
-                   np.log10(spdNan[timeLev,:]), cmap='magma', shading='flat',
+                   np.log10(spdNan[timeLev,:]), cmap='plasma', shading='flat',
                    vmin=np.log10(20.), vmax=np.log10(2.e3)))
     axs[index].tricontour(xCell, yCell, spdMask, levels=[0.9999], colors='cyan')
     axs[index].set_aspect('equal')
