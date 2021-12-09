@@ -63,12 +63,17 @@ class MidpointNormalize(mpl.colors.Normalize):
 # This could definitely be improved.
 #fig, axs = plt.subplots(2, 3, sharex=True, sharey=True, 
 #                        constrained_layout=True)
-fig = plt.figure(figsize=(15,7))
-nRows = 2
-nCols = len(runs) // nRows + 1
+#nRows = 2
+#nCols = len(runs) // nRows + 1  # in case you want to hard-code nRows
+nCols = 4
+nRows = len(runs) // nCols + 1
+# Add another row if necessary
+if nRows * (nCols - 1) < len(runs):
+    nRows += 1
+fig = plt.figure(figsize=(3 * nCols + 1, 3 * nRows + 1))
 # last column is for colorbars
 gs = gridspec.GridSpec(nRows, nCols,
-                       height_ratios=[1,1],
+                       height_ratios=[1] * nRows,
                        width_ratios=[1,1,1,0.1]) 
 axs = []
 for row in np.arange(0, nRows):
@@ -99,10 +104,13 @@ yCell = f.variables["yCell"][:] / 1000.
 
 bedMin = -420.
 bedMax = 780.
-for ax in axs: 
-    bedPlot.append(ax.pcolormesh(bedX, bedY, bed, cmap='BrBG',
+for ii,ax in enumerate(axs):
+    if ii < len(runs):
+        bedPlot.append(ax.pcolormesh(bedX, bedY, bed, cmap='BrBG',
                    vmin=bedMin, vmax=bedMax,
                    norm=MidpointNormalize(bedMin, bedMax, 0.)))
+    else:
+        ax.axis("off")
     #initExtentPlot.append(ax.tricontour(xCell, yCell, initialExtentMask[0,:], colors='black'))
 f.close()
     
