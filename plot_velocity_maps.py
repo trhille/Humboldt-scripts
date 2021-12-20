@@ -198,14 +198,19 @@ for ax in axs:
 for ind in [0,3]:
     axs[ind].set_ylabel('km')
 for ind in [0, 1, 2]:
-    axs[ind].set_xticklabels(['','', '', '', '', ''])
+    axs[ind].xaxis.set_visible(False)
 for ind in [1, 2, 4, 5]:
-    axs[ind].set_yticklabels(['','', '', '', '', ''])
+    axs[ind].yaxis.set_visible(False)
 for ind in [3,4,5]:
     axs[ind].set_xlabel('km')
 
+# Use speed in colorbar instead of log10(speed)
+# (Hard-coding these is not the smartest thing, but works for now.)
+speedTicks = np.log10([20., 200., 2000.])
+speedTickLabels = ['20', '200', '2000']
 cbar1 = Colorbar(ax=cbarAx1, mappable=spdPlot[0], orientation='vertical',
-                 label="log ice speed\n(10$^x$ m yr$^{-1}$)")
+                 label="Ice speed (m yr$^{-1}$)", ticks=speedTicks)
+cbar1.ax.set_yticklabels(speedTickLabels)
 cbar2 = Colorbar(ax=cbarAx2, mappable=bedPlot[0], orientation='vertical',
                  label="Bed elevation (m)")
 
