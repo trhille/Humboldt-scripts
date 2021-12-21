@@ -68,9 +68,11 @@ linestyleList = ['solid', 'dashed', 'dotted', 'dashdot']
 linestyleIndex = 0 # initialize for loop
 
 # create axes to plot into
-varFig, varAx = plt.subplots(len(variableName), 3, sharey='row', sharex=True)
+nCols = 3
+varFig, varAx = plt.subplots(len(variableName), nCols, sharey='row', sharex=True)
+varAx = varAx.ravel()
 #ratioFig, ratioAx = plt.subplots(1,1)
-for ax in varAx.ravel():
+for ax in varAx:
     ax.grid('on')
 
 plotLines = [] #empty list to fill with lines
@@ -148,14 +150,18 @@ def plotEnsemble(ensDir, row, variable, controlFile=None):
                                controlData.variables[variable][:])
                 
                 var2plot = var2plot - controlInterp #+ controlInterp[0]
-
-
+                
+            # find index for plotting
             if 'CNRM' in ensembleMember:
-                plotAx = varAx[row,2]
+                col = 2
             elif 'HadGEM2' in ensembleMember:
-                plotAx = varAx[row,1]
+                col = 1
             elif 'MIROC5' in ensembleMember:
-                plotAx = varAx[row,0]
+                col = 0
+            
+            plotInd = row * nCols + col
+            
+            plotAx = varAx[plotInd]
                 
             tmpLine, = plotAx.plot(yr+2007., var2plot, 
                                    label=ensembleMember)
@@ -179,36 +185,41 @@ controlFile=None
 for directory in ensembleDirs:
     print("Ensemble {}".format(directory))
     for row,variable in enumerate(variableName):
+
+        # This makes labeling flexible for one or more rows.
+        yLabelInd = row * nCols
+        
         if controlFiles:
             controlFile=controlFiles[controlIndex]
         if boundsDirs and boundsIndex <= len(boundsDirs)-1:
             plotEnsembleBounds(boundsDirs[boundsIndex], controlFile)
         plotLines, plotLineNames = plotEnsemble(directory, row, variable, controlFile)
         if variable == "volumeAboveFloatation":
-            addSeaLevAx(varAx[row,-1])
-        if variable == 'volumeAboveFloatation':
-            varAx[row, 0].set_ylabel('Total change in volume above\nfloatation (10$^{12}$ m$^3$)', fontsize=16)
+            addSeaLevAx(varAx[(row + 1) * nCols - 1])
+        if variable == 'volumeAboveFloatation':            
+            varAx[yLabelInd].set_ylabel('Total change in volume above\nfloatation (10$^{12}$ m$^3$)', fontsize=16)
         else:
-            varAx[row, 0].set_ylabel('Total {} (${}$)'.format(variable, units), fontsize=16)
+            varAx[yLabelInd].set_ylabel('Total {} (${}$)'.format(variable, units), fontsize=16)
 
     controlIndex += 1
     linestyleIndex += 1
     boundsIndex += 1
 
-varAx[-1,0].set_xlabel('Year', fontsize=16)
-varAx[0,0].set_title('MIROC5')
-varAx[-1,1].set_xlabel('Year', fontsize=16)
-varAx[0,1].set_title('HadGEM2')
-varAx[-1,2].set_xlabel('Year', fontsize=16)
-varAx[0,2].set_title('CNRM')
+#make this flexible for one or more rows
+    varAx[-3].set_xlabel('Year', fontsize=16)
+    varAx[0].set_title('MIROC5')
+    varAx[-2].set_xlabel('Year', fontsize=16)
+    varAx[1].set_title('HadGEM2')
+    varAx[-1].set_xlabel('Year', fontsize=16)
+    varAx[2].set_title('CNRM')
 
 
 #varAx.legend()
 varFig.tight_layout()
 #varAx.set_ylim(bottom=-7e12, top=0)
-varAx[0,0].set_xlim(left=2007, right=2100.)
-varAx[0,1].set_xlim(left=2007, right=2100.)
-varAx[0,2].set_xlim(left=2007, right=2100.)
+varAx[0].set_xlim(left=2007, right=2100.)
+varAx[1].set_xlim(left=2007, right=2100.)
+varAx[2].set_xlim(left=2007, right=2100.)
 #ratioAx.set_xlim(left=0, right=100.)
 #set a reasonable fontsize
 plt.rcParams.update({'font.size': 16})
@@ -314,6 +325,8 @@ for line, lineName in zip(plotLines, plotLineNames):
         line.set_linestyle('solid')
     elif 'm7_' in lineName:
         line.set_linestyle('dashed')
+    if 'noFaceMelt' in lineName:
+        line.set_color('tab:pink')
 
 
 for bound, boundName in zip(plotBounds, plotBoundNames):
