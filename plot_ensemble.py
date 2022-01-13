@@ -327,6 +327,9 @@ for line, lineName in zip(plotLines, plotLineNames):
         line.set_linestyle('dashed')
     if 'noFaceMelt' in lineName:
         line.set_color('tab:pink')
+    if '5kmyrSpeedLimit' in lineName:
+        line.set_alpha(0.5)
+
 
 
 for bound, boundName in zip(plotBounds, plotBoundNames):
@@ -342,7 +345,7 @@ for bound, boundName in zip(plotBounds, plotBoundNames):
         bound.set_alpha(0.6)
         
 varFig.set_size_inches(15, 7 * len(variableName))
-varFig.subplots_adjust(wspace=0.15, hspace=0.2)
+varFig.subplots_adjust(wspace=0.15, hspace=0.1)
 
 plt.show()
 #varFig.savefig('/Users/trevorhillebrand/Documents/mpas/MALI_output/Humboldt_melt_calv_ensemble/Humboldt_only_runs/projections/SL_contributions.png', dpi=300)
