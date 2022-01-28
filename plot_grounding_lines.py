@@ -83,8 +83,11 @@ initialExtentMask = (cellMask & initialExtentValue) // initialExtentValue
 bedMin = -420.
 bedMax = 780.
 for ax in axs.ravel(): 
-    bedPlot.append(ax.pcolormesh(bedX, bedY, bed, cmap='BrBG', vmin=bedMin, vmax=bedMax, norm=MidpointNormalize(bedMin, bedMax, 0.)))
-    initExtentPlot.append(ax.tricontour(xCell, yCell, initialExtentMask[0,:], colors='black'))
+    bedPlot.append(ax.pcolormesh(bedX, bedY, bed, cmap='BrBG', vmin=bedMin,
+                   vmax=bedMax, norm=MidpointNormalize(bedMin, bedMax, 0.),
+                   rasterized=True))
+    initExtentPlot.append(ax.tricontour(xCell, yCell,
+                          initialExtentMask[0,:], colors='black'))
 f.close()
 
 # Functions to simplify plotting
@@ -104,15 +107,15 @@ def get_line_color(run):
             highCalving = 'VM160'
     
     if '2017calvingFront' in run or 'calvingVelocityData' in run:
-        lineColor = 'lightgrey'
+        lineColor = 'tab:grey'
+    elif 'control' in run:
+        lineColor = 'white'
     elif highCalving in run:
         lineColor = 'tab:purple'
     elif medCalving in run:
         lineColor = 'tab:blue'
     elif lowCalving in run:
         lineColor = 'tab:cyan'
-    else:
-        lineColor = 'white'
     
     return lineColor
 
@@ -177,4 +180,4 @@ fig.subplots_adjust(hspace=0.1, wspace=0.)
 cbar = plt.colorbar(bedPlot[0], ax=axs[:,:], shrink=0.4, label="Bed elevation (m)", orientation='horizontal', pad=0.08)
 
 #plt.show()
-fig.savefig('groundingLines2100', dpi=400, bbox_inches='tight')
+fig.savefig('groundingLines2100.pdf', format='pdf', bbox_inches='tight')
