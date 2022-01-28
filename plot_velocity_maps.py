@@ -26,8 +26,9 @@ rhosw = 1028.0
 print("** Gathering information.  (Invoke with --help for more details. All arguments are optional)")
 parser = OptionParser(description=__doc__)
 parser.add_option("-r", dest="runs", help="path to .nc file or dir containing output.nc file (strings separated by commas; no spaces)", default=None, metavar="FILENAME")
-parser.add_option("-t", dest="timeLevels", help="integer time levels at which to plot (int separated by commas; no spaces)", default=-1, metavar="FILENAME")
-parser.add_option("-b", dest="bedTopo", help="path to gridded bed topography data product for plotting", default='/global/cfs/cdirs/piscees/GIS/BedMachineGreenland-2021-04-20_Humboldt.nc', metavar="FILENAME")
+parser.add_option("-t", dest="timeLevels", help="integer time levels at which to plot (int separated by commas; no spaces)", default=-1)
+parser.add_option("-b", dest="bedTopo", help="path to gridded bed topography data product for plotting",
+                  default='/global/cfs/cdirs/piscees/GIS/BedMachineGreenland-2021-04-20_Humboldt.nc', metavar="FILENAME")
 parser.add_option("-s", dest="saveName", help="filename for saving. If empty or None, will plot to screen instead of saving.", default=None, metavar="FILENAME")
 options, args = parser.parse_args()
 runs = options.runs.split(',') # split run directories into list

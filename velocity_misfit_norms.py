@@ -17,7 +17,7 @@ parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFo
 parser.description = __doc__
 parser.add_argument("-r", "--run", dest="runFiles", help="name of file with result from forward run", metavar="FILENAME")
 parser.add_argument("-o", "--obs", dest="observationsFile", help="name of file with observed surfaceSpeed", metavar="FILENAME")
-parser.add_argument("-t", "--timeLev", dest="timeLev", help="time level to compare with observations", metavar="FILENAME")
+parser.add_argument("-t", "--timeLev", dest="timeLev", help="time level to compare with observations")
 args = parser.parse_args()
 
 timeLev = args.timeLev

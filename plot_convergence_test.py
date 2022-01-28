@@ -16,8 +16,8 @@ import matplotlib as mpl
 
 parser = OptionParser(description=__doc__)
 parser.add_option("-f", dest="filenames", help="path to globalStats.nc files (strings separated by commas; no spaces)", metavar="FILENAME")
-parser.add_option("-v", dest="variables", help="variable(s) to plot, separated by commas", default = "volumeAboveFloatation,groundedIceArea", metavar="FILENAME")
-parser.add_option("-l", dest="labels", help="labels for legend; one per file", default = None, metavar="FILENAME")
+parser.add_option("-v", dest="variables", help="variable(s) to plot, separated by commas", default = "volumeAboveFloatation,groundedIceArea")
+parser.add_option("-l", dest="labels", help="labels for legend; one per file", default = None)
 
 options, args = parser.parse_args()
 filenames = options.filenames.split(',') # split ensemble directories into list

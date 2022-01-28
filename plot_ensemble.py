@@ -30,10 +30,10 @@ print("** Gathering information.  (Invoke with --help for more details. All argu
 parser = OptionParser(description=__doc__)
 parser.add_option("-d", dest="ensembleDirs", help="directory containing ensemble members (strings separated by commas; no spaces)", metavar="FILENAME")
 parser.add_option("-b", dest="boundsDirs", help="directory containing ensemble members (strings separated by commas; no spaces)", metavar="FILENAME")
-parser.add_option("-v", dest="variableName", help="variable(s) to plot, separated by commas", default = "volumeAboveFloatation", metavar="FILENAME")
+parser.add_option("-v", dest="variableName", help="variable(s) to plot, separated by commas", default = "volumeAboveFloatation")
 parser.add_option("-c", dest="controlFiles", help="comma-separated paths to control run(s) to subtract from ensemble members", metavar="FILENAME")
 
-parser.add_option("-u", dest="units", help="units for mass/volume: m3, kg, Gt", default="m3", metavar="FILENAME")
+parser.add_option("-u", dest="units", help="units for mass/volume: m3, kg, Gt", default="m3")
 options, args = parser.parse_args()
 
 ensembleDirs = options.ensembleDirs.split(',') # split ensemble directories into list
