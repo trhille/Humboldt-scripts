@@ -43,8 +43,9 @@ dynamicValue = 2
 floatValue = 4
 groundingLineValue = 256
 
-# Hack for asymmetric colorbap. Matplotlib is dumb.
-# set the colormap and centre the colorbar
+# Hack for asymmetric colorbar, taken from
+# http://chris35wills.github.io/matplotlib_diverging_colorbar/
+# Set the colormap and centre the colorbar
 class MidpointNormalize(mpl.colors.Normalize):
     """Normalise the colorbar."""
     def __init__(self, vmin=None, vmax=None, midpoint=None, clip=False):

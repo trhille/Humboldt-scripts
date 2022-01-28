@@ -45,8 +45,9 @@ xCell = obs.variables["xCell"][:] / 1000.
 yCell = obs.variables["yCell"][:] / 1000.
 obsSpeed = obs.variables["surfaceSpeed"][:] * 3.154e7  # m/yr
 
-# Hack for asymmetric colorbap. Matplotlib is dumb.
-# set the colormap and centre the colorbar
+# Hack for asymmetric colorbar, taken from
+# http://chris35wills.github.io/matplotlib_diverging_colorbar/
+# Set the colormap and centre the colorbar
 class MidpointNormalize(mpl.colors.Normalize):
     """Normalise the colorbar."""
     def __init__(self, vmin=None, vmax=None, midpoint=None, clip=False):
