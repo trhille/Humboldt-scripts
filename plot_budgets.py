@@ -110,7 +110,7 @@ for ii, filename in enumerate(filenames):
 
             totalVol = np.sum(thk * mask * cellAreaArray, axis=1)
             calvingVolFlux = np.sum(calvingThickness * mask * cellAreaArray,axis=1) #m^3
-            faceMeltVolFlux = np.sum(faceMeltingThickness * mask * cellAreaArray,axis=1) # m^3
+            faceMeltVolFlux = np.sum(faceMeltingThickness * cellAreaArray,axis=1) # m^3
             sfcMassBalVolFlux = np.sum(sfcMassBal * mask * cellAreaArray, axis=1) / 910. * deltat
             basalMassBalVolFlux = np.sum(basalMassBal * mask * cellAreaArray, axis=1) / 910. * deltat
             GLvolFlux = GLflux * deltat / 3.154e7 / 910. #m^3
