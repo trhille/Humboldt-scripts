@@ -15,6 +15,7 @@ from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 from optparse import OptionParser
 import time
 
+
 print("** Gathering information.  (Invoke with --help for more details. All arguments are optional)")
 parser = OptionParser(description=__doc__)
 parser.add_option("-f", dest="filename", help="filename for plotting", metavar="FILENAME")
@@ -280,6 +281,40 @@ for ii, filename in enumerate(filenames):
             calvingVolFlux = f.variables['calvingVolFlux'][:] / 1.e12
             totalVol = f.variables['totalVol'][:] / 1.e12
             f.close()
+            
+            # For debugging: Plot independent calculation of GLflux, using fluxAcrossGroundingLine
+            g = Dataset(filename.replace('massBudgets', 'output_all_timesteps.nc'), 'r')
+            
+            if 'fluxAcrossGroundingLine' in g.variables.keys():
+                g.set_auto_mask(False)
+                fluxAcrossGroundingLine = g.variables["fluxAcrossGroundingLine"][:]
+                edgeMask = g.variables['edgeMask'][:]
+                dvEdge = g.variables["dvEdge"][:]
+                deltat = g.variables['deltat'][:]
+                GLyr = g.variables['daysSinceStart'][:] / 365.
+                
+                # Find grounding line cells that are not dynamic margin. This is the true 
+                # grounding line (i.e., ice goes afloat as it passes this edge).
+                # ***Alternative would be grounding line cells that have floating neighbors. 
+                # Compare these calculations***
+                dynamicMarginValue = 16
+                GLvalue = 256
+                dynamicIceValue = 2
+                floatingValue = 4
+                
+                GLmask = (edgeMask & GLvalue) // GLvalue
+                dynamicMarginMask = (edgeMask & dynamicMarginValue) // dynamicMarginValue
+                floatMask = (edgeMask & floatingValue) // floatingValue
+                dynamicIceMask = (edgeMask & dynamicIceValue) // dynamicIceValue
+                
+                GLfluxMask = GLmask * (1 - dynamicMarginMask)
+                
+                # convert to m^3 / yr and sum
+                GLfluxOnEdges = fluxAcrossGroundingLine * GLfluxMask * dvEdge 
+                totalGLflux_from_fluxAcrossGroundingLine = np.cumsum(np.sum(GLfluxOnEdges, axis=1) * deltat)   
+                
+            g.close()
+
         #Now plot the budgets!
         #budgetSumPlot, = ax.plot(yr, np.cumsum(massBudget) - massBudget[0], c='tab:blue');
         massBudget = sfcMassBalVolFlux + basalMassBalVolFlux - faceMeltVolFlux - calvingVolFlux + GLvolFlux
@@ -295,6 +330,8 @@ for ii, filename in enumerate(filenames):
                                           c='tab:orange', linestyle=lineStyle)
                 #GLfluxPlot, = plotAx.plot(yr, np.cumsum(GLvolFlux), c='tab:orange', linestyle=lineStyle)  # uncomment for comparison with globalStats
                 faceMeltPlot, = plotAx.plot(yr, np.cumsum(-faceMeltVolFlux), c='tab:purple', linestyle=lineStyle)
+                # For debugging: Plot grounding line flux calculated from fluxAcrossGroundingLine
+                Glflux_from_fluxAcrossGroundingLinePlot, = plotAx.plot(yr, -totalGLflux_from_fluxAcrossGroundingLine / 1.e12)
                 if plotAx is inset: inset.set_ylim(top=0.075, bottom=-.25)
             elif mask is floatMask:
                 GLfluxPlot, = plotAx.plot(yr, (totalVol - totalVol[0]) -
