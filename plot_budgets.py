@@ -82,6 +82,8 @@ for ii, filename in enumerate(filenames):
         yr = daysSinceStart / 365. + startYear
 
         nCells = f.dimensions["nCells"].size
+        xCell = f.variables['xCell'][:]
+        yCell = f.variables['yCell'][:]
         nEdgesOnCell = f.variables['nEdgesOnCell'][:]
         cellsOnCell = f.variables["cellsOnCell"][:]
 
@@ -144,8 +146,37 @@ for ii, filename in enumerate(filenames):
         toc = time.time()
         print('Finished adding non-dynamic cells to groundedMask in {} s'.format(toc - tic))
 
-#        groundedMask = np.concatenate(([groundedMask[0, :]], groundedMask[0:-1, :]))  # must use the mask from the previous timestep
-#        floatMask = np.concatenate(([floatMask[0, :]], floatMask[0:-1, :]))
+        # These masks will be missing some cells because calving might remove a
+        # cell in the middle of a timestep, for instance. THe best we can do is
+        # add this to the nearest mask.
+        tic = time.time()
+        strandedCellCount = 0
+        for iTime in np.arange(0, len(deltat)):
+            for iCell in np.arange(0, nCells):
+                if (groundedMask[iTime, iCell] + floatMask[iTime, iCell]) == 0 \
+                    and ( (calvingThickness[iTime, iCell] != 0.) or
+                          (sfcMassBal[iTime, iCell] != 0.) or
+                          (basalMassBal[iTime, iCell] != 0.) ):
+                        distToGroundedMask = np.min(np.sqrt(
+                                (xCell[np.where(groundedMask[iTime,:]>0)] - xCell[iCell])**2
+                                + (yCell[np.where(groundedMask[iTime,:]>0)] - yCell[iCell])**2))
+                        distToFloatMask = np.min(np.sqrt(
+                                (xCell[np.where(floatMask[iTime,:]>0)] - xCell[iCell])**2
+                                + (yCell[np.where(floatMask[iTime,:]>0)] - yCell[iCell])**2))
+
+                        if distToGroundedMask < distToFloatMask:
+                            groundedMask[iTime, iCell] = 1
+                        elif distToFloatMask < distToGroundedMask:
+                            floatMask[iTime, iCell] = 1
+                        else:
+                            print('Weird, the distance to the masks is the same' +
+                                  'for iTime={}, iCell={}?'.format(iTime, iCell))
+                        strandedCellCount += 1
+
+        toc = time.time()
+        print('finished adding {} stranded '.format(strandedCellCount) +
+              'cells to grounded and float masks in {} s'.format(toc - tic))
+
         masks = [groundedMask, floatMask]
         # write out masks for debugging
         f.variables['groundedMask'][:] = groundedMask
@@ -167,11 +198,16 @@ for ii, filename in enumerate(filenames):
     elif 'CNRM' in filename:
         col = 2
         colTitle = 'CNRM'
+    else:
+        col = 0
+        colTitle = 'Nope'
 
     if 'm5' in filename:
         lineStyle='solid'
     elif 'm7' in filename:
         lineStyle='dashed'
+    else:
+        lineStyle='solid'
     # loop over floating and grounded masks
     # Define row by mask
     for row, mask in enumerate(masks):
@@ -182,7 +218,7 @@ for ii, filename in enumerate(filenames):
             cellAreaArray = np.tile(areaCell, (np.shape(calvingThickness)[0],1))
 
             totalVol = np.sum(thk * mask * cellAreaArray, axis=1)
-            calvingVolFlux = np.sum(calvingThickness * np.concatenate(([mask[0,:]], mask[0:-1, :])) * cellAreaArray,axis=1) #m^3
+            calvingVolFlux = np.sum(calvingThickness * mask * cellAreaArray,axis=1) #m^3
             faceMeltVolFlux = np.sum(faceMeltingThickness * cellAreaArray,axis=1) # m^3
             sfcMassBalVolFlux = np.sum(sfcMassBal * mask * cellAreaArray, axis=1) / 910. * deltat
             basalMassBalVolFlux = np.sum(basalMassBal * mask * cellAreaArray, axis=1) / 910. * deltat
@@ -242,14 +278,21 @@ for ii, filename in enumerate(filenames):
         massBudget = sfcMassBalVolFlux + basalMassBalVolFlux - faceMeltVolFlux - calvingVolFlux + GLvolFlux
         for plotAx in [inset, ax]:
             if mask is groundedMask:
-                GLfluxPlot, = plotAx.plot(yr, (totalVol - totalVol[0]) - np.cumsum(basalMassBalVolFlux) - np.cumsum(sfcMassBalVolFlux) - np.cumsum(-calvingVolFlux) - np.cumsum(-faceMeltVolFlux), c='tab:orange', linestyle=lineStyle)
+                GLfluxPlot, = plotAx.plot(yr, (totalVol - totalVol[0]) -
+                                          np.cumsum(basalMassBalVolFlux) -
+                                          np.cumsum(sfcMassBalVolFlux) -
+                                          np.cumsum(-calvingVolFlux) -
+                                          np.cumsum(-faceMeltVolFlux),
+                                          c='tab:orange', linestyle=lineStyle)
                 #GLfluxPlot, = plotAx.plot(yr, np.cumsum(GLvolFlux), c='tab:orange', linestyle=lineStyle)
                 faceMeltPlot, = plotAx.plot(yr, np.cumsum(-faceMeltVolFlux), c='tab:purple', linestyle=lineStyle)
                 if plotAx is inset: inset.set_ylim(top=0.075, bottom=-.25)
             elif mask is floatMask:
-                GLfluxPlot, = plotAx.plot(yr, (totalVol - totalVol[0]) - np.cumsum(sfcMassBalVolFlux) - 
-                                               np.cumsum(-calvingVolFlux) - np.cumsum(basalMassBalVolFlux),
-                                               c='tab:orange', linestyle=lineStyle)
+                GLfluxPlot, = plotAx.plot(yr, (totalVol - totalVol[0]) -
+                                          np.cumsum(sfcMassBalVolFlux) -
+                                          np.cumsum(-calvingVolFlux) -
+                                          np.cumsum(basalMassBalVolFlux),
+                                          c='tab:orange', linestyle=lineStyle)
                 basalMassBalPlot, = plotAx.plot(yr, np.cumsum(basalMassBalVolFlux), c='tab:cyan', linestyle=lineStyle)
                 if plotAx is inset: inset.set_ylim(top=.07, bottom=-.03)
             basalMassBalPlot, = plotAx.plot(yr, np.cumsum(basalMassBalVolFlux), c='tab:cyan', linestyle=lineStyle)
