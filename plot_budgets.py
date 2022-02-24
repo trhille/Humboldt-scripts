@@ -154,23 +154,25 @@ for ii, filename in enumerate(filenames):
         print('Finished adding non-dynamic cells to groundedMask in {} s'.format(toc - tic))
 
         # These masks will be missing some cells because calving might remove a
-        # cell in the middle of a timestep, for instance. THe best we can do is
+        # cell in the middle of a timestep, for instance. The best we can do is
         # add this to the nearest mask.
+        floatMaskKeep2 = floatMask.copy()
+        groundedMaskKeep2 = groundedMask.copy()
         tic = time.time()
         strandedCellCount = 0  # count how many cells are accounted for in this loop
         for iTime in np.arange(0, len(deltat)):
             for iCell in np.arange(0, nCells):
-                if (groundedMask[iTime, iCell] + floatMask[iTime, iCell]) == 0 \
-                    and ( (calvingThickness[iTime, iCell] != 0.) or
-                          (sfcMassBal[iTime, iCell] != 0.) or
-                          (basalMassBal[iTime, iCell] != 0.) ):
-                        # calculate the distance from this cell to each mask
+                if (groundedMaskKeep2[iTime, iCell] + floatMaskKeep2[iTime, iCell]) == 0 \
+                    and ( (np.abs(calvingThickness[iTime, iCell]) > np.finfo('float64').eps) or
+                          (np.abs(sfcMassBal[iTime, iCell]) >  np.finfo('float64').eps) or
+                          (np.abs(basalMassBal[iTime, iCell]) > np.finfo('float64').eps) ):
+
                         distToGroundedMask = np.min(np.sqrt(
-                                (xCell[np.where(groundedMask[iTime,:]>0)] - xCell[iCell])**2
-                                + (yCell[np.where(groundedMask[iTime,:]>0)] - yCell[iCell])**2))
+                                (xCell[np.where(groundedMaskKeep2[iTime,:]>0)] - xCell[iCell])**2
+                                + (yCell[np.where(groundedMaskKeep2[iTime,:]>0)] - yCell[iCell])**2))
                         distToFloatMask = np.min(np.sqrt(
-                                (xCell[np.where(floatMask[iTime,:]>0)] - xCell[iCell])**2
-                                + (yCell[np.where(floatMask[iTime,:]>0)] - yCell[iCell])**2))
+                                (xCell[np.where(floatMaskKeep2[iTime,:]>0)] - xCell[iCell])**2
+                                + (yCell[np.where(floatMaskKeep2[iTime,:]>0)] - yCell[iCell])**2))
 
                         if distToGroundedMask < distToFloatMask:
                             groundedMask[iTime, iCell] = 1
