@@ -13,6 +13,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 from optparse import OptionParser
+import time
 
 print("** Gathering information.  (Invoke with --help for more details. All arguments are optional)")
 parser = OptionParser(description=__doc__)
@@ -29,6 +30,7 @@ nRows = 2 #nFiles * 2
 nCols = 3 #nFiles
 
 fig, axs = plt.subplots(nrows=nRows, ncols=nCols, sharex=True, sharey='row')
+fig.set_size_inches(15, 12)
 insetAxs = []
 for ii,ax in enumerate(axs.ravel()):
     if ii <= 2: insetLoc = 3; insetWidth="40%"; insetHeight="45%"
@@ -39,10 +41,39 @@ for ii,ax in enumerate(axs.ravel()):
 
 floatValue = 4 # value in cellMask denoting floating ice
 dynamicValue = 2 # value in cellMask denoting dynamic ice.
+iceValue = 32
+def flood_fill(seedMask, growMask):
+    """
+    Flood fill algorithm stolen from subroutine in mpas_li_calving.F, used for
+    adding subglacial lakes to groundedMask (and maybe other things).
+    """
+    localLoopCount = 0
+    newMaskCountLocal = 1
+    while (newMaskCountLocal > 0):
+        localLoopCount += 1
+
+        newMaskCountLocal = 0
+        seedMaskOld = seedMask.copy()
+
+        for iCell in range(nCells):
+            if ( growMask[iCell] > 0 ):
+                # If it has a marked neighbor, then add it to the mask
+                for n in range(nEdgesOnCell[iCell]):
+                        jCell = cellsOnCell[iCell, n] - 1
+                        if ( (jCell > -1) and (seedMaskOld[jCell] == 1) and (seedMask[iCell] != 1) ):
+                           seedMask[iCell] = 1
+                           newMaskCountLocal += 1
+                           # skip the rest of this loop - no need to
+                           # check additional neighbors
+                           continue
+
+    return seedMask
+
+
 for ii, filename in enumerate(filenames):
     print(filename)
     if 'massBudgets' not in filename:
-        f = Dataset(filename, 'r')
+        f = Dataset(filename, 'r+')
         f.set_auto_mask(False)
         print('Calculating mass budgets from {}'.format(filename))
         g = Dataset(filename.replace('output_all_timesteps', 'globalStats'))
@@ -51,6 +82,7 @@ for ii, filename in enumerate(filenames):
         yr = daysSinceStart / 365. + startYear
 
         nCells = f.dimensions["nCells"].size
+        nEdgesOnCell = f.variables['nEdgesOnCell'][:]
         cellsOnCell = f.variables["cellsOnCell"][:]
 
         GLflux = g.variables["groundingLineFlux"][:]
@@ -65,25 +97,66 @@ for ii, filename in enumerate(filenames):
         areaCell = f.variables["areaCell"][:]
         
         cellMask = f.variables["cellMask"][:]
-        floatMask = (cellMask & floatValue) // floatValue
+        iceMask = (cellMask & iceValue) // iceValue
+        floatMaskKeep = (cellMask & floatValue) // floatValue
+        floatMask = floatMaskKeep.copy()
         dynamicMask = (cellMask & dynamicValue) // dynamicValue
-        groundedMask = (thk > 1) - floatMask
-        masks = [groundedMask, floatMask]
-        f.close()
+        nonDynamicMask = (1 - dynamicMask) * iceMask
+        groundedMaskKeep = (thk > 1) - floatMask
+        groundedMask = groundedMaskKeep.copy()
+
+        # Add subglacial lakes to the grounded mask. Do this by starting with
+        # a seedMask of floating cells that have an ocean open or non-dynamic
+        # floating neighbor and a growMask that is all floating ice.
+        print('Adding subglacial lake cells to groundedMask')
+        tic = time.time()
+        floodFillMask = cellMask * 0
+        for iTime in np.arange(0, len(deltat)):
+            seedMask = thk[0, :] * 0
+            for iCell in np.arange(0, nCells):
+                neighbors = cellsOnCell[iCell] - 1
+                neighbors = neighbors[neighbors > -1]  # cellsOnCell = 0 in netCDF do not exist
+                if ( (floatMask[iTime, iCell] == 1) and
+                ( (np.sum(nonDynamicMask[iTime, neighbors]) >= 1)
+                or (np.min(thk[iTime, neighbors]) <= 1) ) ):
+                    seedMask[iCell] = 1
+
+            floodFillMask[iTime, :] = flood_fill(
+                                           seedMask=seedMask,
+                                           growMask=floatMaskKeep[iTime, :] )
+
+        subglacialLakeMask = iceMask - groundedMask - floodFillMask
+        groundedMask += subglacialLakeMask
+        floatMask -= subglacialLakeMask
+        toc = time.time()
+        print('Finished adding {} subglacial lake cells to grounded mask in {} s'.format(np.sum(subglacialLakeMask), toc - tic))
+
         # add non-dynamic cells fringing grounded ice to groundedMask
         print('Adding non-dynamic cells neighboring grounded ice to groundedMask')
+        tic = time.time()
         for iTime in np.arange(0, len(deltat)):
             for iCell in np.arange(0, nCells):
-                if (dynamicMask[iTime, iCell] == 0) and (np.sum(groundedMask[iTime, cellsOnCell[iCell]-1]) >= 1):
+                neighbors = cellsOnCell[iCell] - 1
+                neighbors = neighbors[neighbors > -1]  # cellsOnCell = 0 in netCDF do not exist
+                if (nonDynamicMask[iTime, iCell] == 1) and (np.sum(groundedMaskKeep[iTime, neighbors]) >= 1):
                     groundedMask[iTime, iCell] = 1
                     floatMask[iTime, iCell] = 0
+        toc = time.time()
+        print('Finished adding non-dynamic cells to groundedMask in {} s'.format(toc - tic))
 
-        print('Finished adding non-dynamic cells to groundedMask')
+#        groundedMask = np.concatenate(([groundedMask[0, :]], groundedMask[0:-1, :]))  # must use the mask from the previous timestep
+#        floatMask = np.concatenate(([floatMask[0, :]], floatMask[0:-1, :]))
+        masks = [groundedMask, floatMask]
+        # write out masks for debugging
+        f.variables['groundedMask'][:] = groundedMask
+        f.variables['floatMask'][:] = floatMask
+        f.variables['SGLmask'][:] = subglacialLakeMask
+        f.close()
     else:
         groundedMask ='groundedMask'
         floatMask = 'floatMask'
         masks = [groundedMask, floatMask]
-
+   
     # Define columns by climate forcing
     if 'MIROC5' in filename:
         col = 0
@@ -109,7 +182,7 @@ for ii, filename in enumerate(filenames):
             cellAreaArray = np.tile(areaCell, (np.shape(calvingThickness)[0],1))
 
             totalVol = np.sum(thk * mask * cellAreaArray, axis=1)
-            calvingVolFlux = np.sum(calvingThickness * mask * cellAreaArray,axis=1) #m^3
+            calvingVolFlux = np.sum(calvingThickness * np.concatenate(([mask[0,:]], mask[0:-1, :])) * cellAreaArray,axis=1) #m^3
             faceMeltVolFlux = np.sum(faceMeltingThickness * cellAreaArray,axis=1) # m^3
             sfcMassBalVolFlux = np.sum(sfcMassBal * mask * cellAreaArray, axis=1) / 910. * deltat
             basalMassBalVolFlux = np.sum(basalMassBal * mask * cellAreaArray, axis=1) / 910. * deltat
@@ -119,7 +192,7 @@ for ii, filename in enumerate(filenames):
                 title = 'Grounded Ice'
                 maskName = 'groundedMask'
                 GLvolFlux = GLvolFlux * -1. #mass loss for grounded ice
-                basalMassBalVolFlux *= 0. # I don't know why, but there are huge negative spikes for grounded ice, likely related to surges?
+#                basalMassBalVolFlux *= 0. # I don't know why, but there are huge negative spikes for grounded ice, likely related to surges?
             elif mask is floatMask:
                 title = 'Floating Ice'
                 maskName = 'floatMask'
@@ -169,14 +242,17 @@ for ii, filename in enumerate(filenames):
         massBudget = sfcMassBalVolFlux + basalMassBalVolFlux - faceMeltVolFlux - calvingVolFlux + GLvolFlux
         for plotAx in [inset, ax]:
             if mask is groundedMask:
-                GLfluxPlot, = plotAx.plot(yr, np.cumsum(GLvolFlux), c='tab:orange', linestyle=lineStyle)
+                GLfluxPlot, = plotAx.plot(yr, (totalVol - totalVol[0]) - np.cumsum(basalMassBalVolFlux) - np.cumsum(sfcMassBalVolFlux) - np.cumsum(-calvingVolFlux) - np.cumsum(-faceMeltVolFlux), c='tab:orange', linestyle=lineStyle)
+                #GLfluxPlot, = plotAx.plot(yr, np.cumsum(GLvolFlux), c='tab:orange', linestyle=lineStyle)
                 faceMeltPlot, = plotAx.plot(yr, np.cumsum(-faceMeltVolFlux), c='tab:purple', linestyle=lineStyle)
                 if plotAx is inset: inset.set_ylim(top=0.075, bottom=-.25)
             elif mask is floatMask:
-                GLfluxPlot, = plotAx.plot(yr, totalVol - totalVol[0] - np.cumsum(massBudget) 
-                                      + massBudget[0], c='tab:orange', linestyle=lineStyle)
+                GLfluxPlot, = plotAx.plot(yr, (totalVol - totalVol[0]) - np.cumsum(sfcMassBalVolFlux) - 
+                                               np.cumsum(-calvingVolFlux) - np.cumsum(basalMassBalVolFlux),
+                                               c='tab:orange', linestyle=lineStyle)
                 basalMassBalPlot, = plotAx.plot(yr, np.cumsum(basalMassBalVolFlux), c='tab:cyan', linestyle=lineStyle)
                 if plotAx is inset: inset.set_ylim(top=.07, bottom=-.03)
+            basalMassBalPlot, = plotAx.plot(yr, np.cumsum(basalMassBalVolFlux), c='tab:cyan', linestyle=lineStyle)
             sfcMassBalPlot, = plotAx.plot(yr, np.cumsum(sfcMassBalVolFlux), c='tab:pink', linestyle=lineStyle)
             calvingPlot, = plotAx.plot(yr, np.cumsum(-calvingVolFlux), c='tab:green', linestyle=lineStyle)
             totalVolChangePlot, = plotAx.plot(yr, totalVol - totalVol[0], c='black', linestyle=lineStyle); 
