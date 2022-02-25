@@ -135,7 +135,7 @@ for ii, filename in enumerate(filenames):
         # are not connected to the ice shelf, as determined by flood_fill().
         subglacialLakeMask = iceMask - groundedMask - floodFillMask
         groundedMask += subglacialLakeMask  # add them to grounded ice mask
-        floatMask -= subglacialLakeMask  # and remove them from floating ice mask
+        floatMask *= (1 - subglacialLakeMask)  # and remove them from floating ice mask
         toc = time.time()
         print('Finished adding {} subglacial lake cells to grounded mask in {} s'.format(np.sum(subglacialLakeMask), toc - tic))
 
