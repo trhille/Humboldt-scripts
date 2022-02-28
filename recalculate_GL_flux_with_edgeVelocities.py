@@ -104,8 +104,6 @@ for iTime in np.arange(0, len(deltat)):
             cellMask_floating[iTime, iCell] = 0  # remove it from floatMask
 toc = time.time()
 print('Finished adding non-dynamic cells to groundedMask in {} s'.format(toc - tic))
-#f.variables['cellMask_grounded'][:]=cellMask_grounded[:]
-#f.variables['cellMask_floating'][:]=cellMask_floating[:]
 
 doCalc=True
 if doCalc:
@@ -132,7 +130,7 @@ if doCalc:
 
        floodFillMask[iTime, :] = flood_fill(
                                       seedMask=seedMask,
-                                      growMask=cellMask_floatingKeep[iTime, :] )
+                                      growMask=cellMask_floating[iTime, :] )  # Need to use the updated floating mask for growing to avoid growing back into the floating fringe we removed in the previous step
    # Subglacial lakes are cells in the iceMask that are not grounded and
    # are not connected to the ice shelf, as determined by flood_fill().
    #subglacialLakeMask = cellMask_ice * np.logical_not(cellMask_grounded) * np.logical_not(floodFillMask)
@@ -142,27 +140,24 @@ if doCalc:
    cellMask_grounded = np.logical_and(np.logical_not(floodFillMask), cellMask_ice)
    toc = time.time()
    #print('Finished adding {} subglacial lake cells to grounded mask in {} s'.format(np.sum(subglacialLakeMask), toc - tic))
-   np.save('cMg', cellMask_grounded)
-   np.save('cMf', cellMask_floating)
-   if not 'cellMask_grounded' in f.variables:
-      f.createVariable('cellMask_grounded', 'd', ('Time','nCells'))
-   if not 'cellMask_floating' in f.variables:
-      f.createVariable('cellMask_floating', 'd', ('Time','nCells'))
-   f.variables['cellMask_grounded'][:]=cellMask_grounded[:]
-   ##f.variables['cellMask_grounded'][:]=floodFillMask[:]
-   f.variables['cellMask_floating'][:]=cellMask_floating[:]
 else:
-   np.load('cMg.npy')
-   np.load('cMf.npy')
-   #f.createVariable('cellMask_grounded', 'd', ('Time','nCells'))
-   #f.createVariable('cellMask_floating', 'd', ('Time','nCells'))
-   #f.variables['cellMask_grounded'][:]=cellMask_grounded[:]
-   #f.variables['cellMask_floating'][:]=cellMask_floating[:]
+   # load the masks from the file where we should have written them previously.
+   cellMask_grounded[:] = f.variables['cellMask_grounded'][:]
+   cellMask_floating[:] = f.variables['cellMask_floating'][:]
 
+
+# add some variables to the output file so we can write out masks for debugging/viz
+if not 'cellMask_grounded' in f.variables:
+   f.createVariable('cellMask_grounded', 'd', ('Time','nCells'))
+if not 'cellMask_floating' in f.variables:
+   f.createVariable('cellMask_floating', 'd', ('Time','nCells'))
+# Save the final masks
+f.variables['cellMask_grounded'][:]=cellMask_grounded[:]
+f.variables['cellMask_floating'][:]=cellMask_floating[:]
 
 
 if not 'myGLF' in f.variables:
-      f.createVariable('myGLF', 'd', ('Time','nEdges'))
+      f.createVariable('myGLF', 'd', ('Time','nEdges')) # Note this field is on edges - won't show up in Paraview
 tic = time.time()
 myGLF = np.zeros(deltat.shape)
 for t in range(len(deltat)):
@@ -182,13 +177,6 @@ for t in range(len(deltat)):
             flux[e] = (lnv[e,:]*lt[e,:]).sum() * GLFsign
     myGLF[t] = (flux*dvEdge).sum() #units of m3/s
     f.variables['myGLF'][t,:]=flux
-    #flux2= flux.copy()
-    #flux2[flux==0.0]=np.nan
-    ##plt.plot(xEdge, yEdge, '.k')
-    #plt.scatter(xEdge, yEdge, 6, flux2)
-    #plt.colorbar()
-    #plt.title(t)
-    #plt.show()
 toc = time.time()
 print('Finished GLF calc in {} s'.format(toc - tic))
 
