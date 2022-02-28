@@ -13,7 +13,7 @@ import time
 import pickle
 
 
-f = Dataset('/global/cscratch1/sd/trhille/Humboldt_1to10km_r04_20210615/m5/MIROC5/VM170_shelfMelt20myr/debug_groundingLineFlux_noForcing/output_editable.nc', 'r+')
+f = Dataset('/global/cscratch1/sd/trhille/Humboldt_1to10km_r04_20210615/m5/MIROC5/VM170_shelfMelt20myr/debug_groundingLineFlux/output_editable2.nc', 'r+')
 #f = Dataset('output_all_timesteps.nc', 'r+')
 
 f.set_auto_mask(False)
@@ -21,6 +21,10 @@ f.set_auto_mask(False)
 fluxAcrossGroundingLine = f.variables["fluxAcrossGroundingLine"][:]
 thk = f.variables['thickness'][:]
 bed = f.variables['bedTopography'][:]
+sfcMassBal = f.variables["sfcMassBalApplied"][:]
+basalMassBal = f.variables["basalMassBal"][:]
+faceMeltingThickness = f.variables["faceMeltingThickness"][:] #m
+calvingThickness = f.variables["calvingThickness"][:]
 areaCell = f.variables['areaCell'][:]
 edgeMask = f.variables['edgeMask'][:]
 cellMask = f.variables['cellMask'][:]
@@ -31,6 +35,8 @@ dvEdge = f.variables["dvEdge"][:]
 deltat = f.variables['deltat'][:]
 xEdge = f.variables['xEdge'][:]
 yEdge = f.variables['yEdge'][:]
+xCell = f.variables['xCell'][:]
+yCell = f.variables['yCell'][:]
 nCells = f.dimensions['nCells'].size
 nEdges = f.dimensions['nEdges'].size
 GLyr = f.variables['daysSinceStart'][:] / 365.
@@ -50,7 +56,7 @@ iceValue = 32
 def flood_fill(seedMask, growMask):
     """
     Flood fill algorithm stolen from subroutine in mpas_li_calving.F, used for
-    adding subglacial lakes to groundedMask (and maybe other things).
+    adding subglacial lakes to cellMask_grounded (and maybe other things).
     """
     localLoopCount = 0
     newMaskCountLocal = 1
@@ -92,7 +98,7 @@ cellMask_grounded = cellMask_groundedKeep.copy()
 cellMask_dynamic = (cellMask & dynamicIceValue) // dynamicIceValue
 cellMask_nondynamic = np.logical_not(cellMask_dynamic) * cellMask_ice
 
-print('Adding non-dynamic cells neighboring grounded ice to groundedMask')
+print('Adding non-dynamic cells neighboring grounded ice to cellMask_grounded')
 tic = time.time()
 for iTime in np.arange(0, len(deltat)):
     for iCell in np.arange(0, nCells):
@@ -100,17 +106,17 @@ for iTime in np.arange(0, len(deltat)):
         neighbors = cellsOnCell[iCell] - 1
         neighbors = neighbors[neighbors > -1]  # cellsOnCell = 0 in netCDF do not exist
         if (np.sum(cellMask_groundedKeep[iTime, neighbors]) >= 1):
-            cellMask_grounded[iTime, iCell] = 1  # add this cell to groundedMask
-            cellMask_floating[iTime, iCell] = 0  # remove it from floatMask
+            cellMask_grounded[iTime, iCell] = 1  # add this cell to cellMask_grounded
+            cellMask_floating[iTime, iCell] = 0  # remove it from cellMask_floating
 toc = time.time()
-print('Finished adding non-dynamic cells to groundedMask in {} s'.format(toc - tic))
+print('Finished adding non-dynamic cells to cellMask_grounded in {} s'.format(toc - tic))
 
 doCalc=True
 if doCalc:
    # Add subglacial lakes to the grounded mask. Do this by starting with
    # a seedMask of floating cells that have an ocean open or non-dynamic
    # floating neighbor and a growMask that is all floating ice.
-   print('Adding subglacial lake cells to groundedMask')
+   print('Adding subglacial lake cells to cellMask_grounded')
    tic = time.time()
    floodFillMask = cellMask * 0
    for iTime in np.arange(0, len(deltat)):
@@ -140,6 +146,40 @@ if doCalc:
    cellMask_grounded = np.logical_and(np.logical_not(floodFillMask), cellMask_ice)
    toc = time.time()
    #print('Finished adding {} subglacial lake cells to grounded mask in {} s'.format(np.sum(subglacialLakeMask), toc - tic))
+
+   # These masks will be missing some cells because calving might remove a
+   # cell in the middle of a timestep, for instance. The best we can do is
+   # add this to the nearest mask.
+   cellMask_floatingKeep2 = cellMask_floating.copy()
+   cellMask_groundedKeep2 = cellMask_grounded.copy()
+   tic = time.time()
+   strandedCellCount = 0  # count how many cells are accounted for in this loop
+   for iTime in np.arange(0, len(deltat)):
+       for iCell in np.arange(0, nCells):
+           if (cellMask_groundedKeep2[iTime, iCell] + cellMask_floatingKeep2[iTime, iCell]) == 0 \
+               and ( (np.abs(calvingThickness[iTime, iCell]) > np.finfo('float64').eps) or
+                     (np.abs(sfcMassBal[iTime, iCell]) >  np.finfo('float64').eps) or
+                     (np.abs(basalMassBal[iTime, iCell]) > np.finfo('float64').eps) ):
+
+                   distToGroundedMask = np.min(np.sqrt(
+                           (xCell[np.where(cellMask_groundedKeep2[iTime,:]>0)] - xCell[iCell])**2
+                           + (yCell[np.where(cellMask_groundedKeep2[iTime,:]>0)] - yCell[iCell])**2))
+                   distToFloatMask = np.min(np.sqrt(
+                           (xCell[np.where(cellMask_floatingKeep2[iTime,:]>0)] - xCell[iCell])**2
+                           + (yCell[np.where(cellMask_floatingKeep2[iTime,:]>0)] - yCell[iCell])**2))
+
+                   if distToGroundedMask < distToFloatMask:
+                       cellMask_grounded[iTime, iCell] = 1
+                   elif distToFloatMask < distToGroundedMask:
+                       cellMask_floating[iTime, iCell] = 1
+                   else:
+                       # This shouldn't happen except maybe in very rare circumstances
+                       print('Weird, the distance to the masks is the same' +
+                             'for iTime={}, iCell={}?'.format(iTime, iCell))
+                   strandedCellCount += 1
+   toc = time.time()
+   print('finished adding {} stranded '.format(strandedCellCount) +
+         'cells to grounded and float masks in {} s'.format(toc - tic))
 else:
    # load the masks from the file where we should have written them previously.
    cellMask_grounded[:] = f.variables['cellMask_grounded'][:]
@@ -200,6 +240,16 @@ totalFloatingVol = np.sum(thk * cellMask_floating * cellAreaArray, axis=1)
 GLfluxOnEdges = fluxAcrossGroundingLine * GLfluxMask * dvEdge
 totalGLflux = np.sum(GLfluxOnEdges, axis=1)
 
+calvingVolFlux = np.sum(calvingThickness * cellMask_grounded * cellAreaArray,axis=1) #m^3
+faceMeltVolFlux = np.sum(faceMeltingThickness * cellAreaArray,axis=1) # m^3
+sfcMassBalVolFlux = np.sum(sfcMassBal * cellMask_grounded * cellAreaArray, axis=1) / 910. * deltat
+basalMassBalVolFlux = np.sum(basalMassBal * cellMask_grounded * cellAreaArray, axis=1) / 910. * deltat
+GLflux_as_residual = ( np.cumsum(np.gradient(totalGroundedVol)) -
+                       np.cumsum(basalMassBalVolFlux) -
+                       np.cumsum(sfcMassBalVolFlux) -
+                       np.cumsum(-calvingVolFlux) -
+                       np.cumsum(-faceMeltVolFlux) )
+
 fig, axs = plt.subplots(2)
 axs[0].plot(GLyr + 2007., -np.cumsum(g2f), 'g', label='G2F')
 axs[0].plot(GLyr + 2007., -np.cumsum(totalGLflux * deltat), 'r', label='cumulative GL flux')
@@ -207,8 +257,13 @@ axs[0].plot(GLyr + 2007., -np.cumsum(totalGLflux * deltat)-np.cumsum(g2f), 'r--'
 axs[0].plot(GLyr + 2007., -np.cumsum(myGLF * deltat), 'b', label='myGLF')
 axs[0].plot(GLyr + 2007., -np.cumsum(myGLF * deltat)-np.cumsum(g2f), 'b--', label='myGLF+G2F')
 axs[0].plot(GLyr + 2007., np.cumsum(np.gradient(totalGroundedVol)), 'k', label='total grounded volume change')
+basalMassBalPlot, = axs[0].plot(GLyr + 2007., np.cumsum(basalMassBalVolFlux), c='tab:cyan', label='BMB')
+sfcMassBalPlot, = axs[0].plot(GLyr + 2007., np.cumsum(sfcMassBalVolFlux), c='tab:pink', label='SMB')
+calvingPlot, = axs[0].plot(GLyr + 2007., np.cumsum(-calvingVolFlux), c='tab:green', label='grounded calving')
+faceMeltPlot, = axs[0].plot(GLyr + 2007., np.cumsum(-faceMeltVolFlux), c='tab:purple', label='face-melt')
+Glflux_as_residual_plot = axs[0].plot(GLyr + 2007., GLflux_as_residual, c='magenta', label='GL flux as residual')
 plt.ylabel('cumulative volume change')
-axs[0].legend()
+axs[0].legend(loc='best', fontsize=8)
 
 axs[1].plot(GLyr + 2007., np.cumsum(totalGLflux * deltat), label='cumulative GL flux')
 axs[1].plot(GLyr + 2007., np.cumsum(myGLF * deltat), label='myGLF')
