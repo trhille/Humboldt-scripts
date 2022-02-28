@@ -31,6 +31,7 @@ cellMask = f.variables['cellMask'][:]
 cellsOnCell = f.variables['cellsOnCell'][:]
 cOnE = f.variables['cellsOnEdge'][:]
 nEdgesOnCell = f.variables['nEdgesOnCell'][:]
+edgesOnCell = f.variables['edgesOnCell'][:]
 dvEdge = f.variables["dvEdge"][:]
 deltat = f.variables['deltat'][:]
 xEdge = f.variables['xEdge'][:]
@@ -98,21 +99,21 @@ cellMask_grounded = cellMask_groundedKeep.copy()
 cellMask_dynamic = (cellMask & dynamicIceValue) // dynamicIceValue
 cellMask_nondynamic = np.logical_not(cellMask_dynamic) * cellMask_ice
 
-print('Adding non-dynamic cells neighboring grounded ice to cellMask_grounded')
-tic = time.time()
-for iTime in np.arange(0, len(deltat)):
-    for iCell in np.arange(0, nCells):
-      if (cellMask_nondynamic[iTime, iCell] == 1) and (cellMask_floatingKeep[iTime, iCell] == 1):
-        neighbors = cellsOnCell[iCell] - 1
-        neighbors = neighbors[neighbors > -1]  # cellsOnCell = 0 in netCDF do not exist
-        if (np.sum(cellMask_groundedKeep[iTime, neighbors]) >= 1):
-            cellMask_grounded[iTime, iCell] = 1  # add this cell to cellMask_grounded
-            cellMask_floating[iTime, iCell] = 0  # remove it from cellMask_floating
-toc = time.time()
-print('Finished adding non-dynamic cells to cellMask_grounded in {} s'.format(toc - tic))
-
 doCalc=True
 if doCalc:
+   print('Adding non-dynamic cells neighboring grounded ice to groundedMask')
+   tic = time.time()
+   for iTime in np.arange(0, len(deltat)):
+       for iCell in np.arange(0, nCells):
+         if (cellMask_nondynamic[iTime, iCell] == 1) and (cellMask_floatingKeep[iTime, iCell] == 1):
+           neighbors = cellsOnCell[iCell] - 1
+           neighbors = neighbors[neighbors > -1]  # cellsOnCell = 0 in netCDF do not exist
+           if (np.sum(cellMask_groundedKeep[iTime, neighbors]) >= 1):
+               cellMask_grounded[iTime, iCell] = 1  # add this cell to groundedMask
+               cellMask_floating[iTime, iCell] = 0  # remove it from floatMask
+   toc = time.time()
+   print('Finished adding non-dynamic cells to groundedMask in {} s'.format(toc - tic))
+
    # Add subglacial lakes to the grounded mask. Do this by starting with
    # a seedMask of floating cells that have an ocean open or non-dynamic
    # floating neighbor and a growMask that is all floating ice.
