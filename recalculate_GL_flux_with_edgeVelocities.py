@@ -197,31 +197,7 @@ f.variables['cellMask_grounded'][:]=cellMask_grounded[:]
 f.variables['cellMask_floating'][:]=cellMask_floating[:]
 
 
-if not 'myGLF' in f.variables:
-      f.createVariable('myGLF', 'd', ('Time','nEdges')) # Note this field is on edges - won't show up in Paraview
-tic = time.time()
-myGLF = np.zeros(deltat.shape)
-for t in range(len(deltat)):
-    lnv =  f.variables['layerNormalVelocity'][t,:,:]
-    lt  =  f.variables['layerThicknessEdge'][t,:,:]
-    flux =  np.zeros( (nEdges,) )
-    for e in range(nEdges):
-        c1 = cOnE[e,0]-1
-        c2 = cOnE[e,1]-1
-        if (((cellMask_grounded[t,c1]==1) and (cellMask_floating[t,c2]==1)) or
-            ((cellMask_grounded[t,c2]==1) and (cellMask_floating[t,c1]==1))):
-            # find sign of flux.  positive velo goes from cell 1 to cell 2
-            if cellMask_grounded[t,c1]==1:
-                GLFsign=1.0 # will yield positive flux for velocity from grounded to floating
-            else:
-                GLFsign=-1.0
-            flux[e] = (lnv[e,:]*lt[e,:]).sum() * GLFsign
-    myGLF[t] = (flux*dvEdge).sum() #units of m3/s
-    f.variables['myGLF'][t,:]=flux
-toc = time.time()
-print('Finished GLF calc in {} s'.format(toc - tic))
-
-
+print('Calculating grToFlt')
 grToFlt = np.zeros(thk.shape)
 for t in range(1,len(deltat)):
     grToFlt[t-1,:]  = np.logical_and(cellMask_grounded[t-1], cellMask_floating[t]) * thk[t,:]
@@ -230,8 +206,68 @@ if not 'gTOf' in f.variables:
     f.createVariable('gTOf', 'd', ('Time','nCells'))
 f.variables['gTOf'][:]=grToFlt
 
-
 g2f = (grToFlt * cellAreaArray).sum(axis=1) # m3
+
+
+
+print('Calculating GLF from scratch')
+tic = time.time()
+flux_array = np.zeros((len(deltat), nEdges))
+for t in range(1,len(deltat)):
+    maskTime = t-1
+    lnv =  f.variables['layerNormalVelocity'][t,:,:]
+    lt  =  f.variables['layerThicknessEdge'][t,:,:]
+    for e in range(nEdges):
+        c1 = cOnE[e,0]-1
+        c2 = cOnE[e,1]-1
+        if (((cellMask_grounded[maskTime,c1]==1) and (cellMask_floating[maskTime,c2]==1)) or
+            ((cellMask_grounded[maskTime,c2]==1) and (cellMask_floating[maskTime,c1]==1))):
+            # find sign of flux.  positive velo goes from cell 1 to cell 2
+            if cellMask_grounded[maskTime,c1]==1:
+                GLFsign=1.0 # will yield positive flux for velocity from grounded to floating
+            else:
+                GLFsign=-1.0
+            flux_array[t,e] = (lnv[e,:]*lt[e,:]).sum() * GLFsign
+toc = time.time()
+print('Finished GLF calc in {} s'.format(toc - tic))
+
+
+# remove GLF on masked cells
+print("cleaning GLF")
+#for t in range(1,len(deltat)):
+#    lnv =  f.variables['layerNormalVelocity'][t,:,:]
+#    lt  =  f.variables['layerThicknessEdge'][t,:,:]
+#    for iCell in range(nCells):
+#        if grToFlt[t-1,iCell] != 0.0:
+#            allEdges = edgesOnCell[iCell, :nEdgesOnCell[iCell]]
+#            prevGLedges = flux_array[t, allEdges] != 0
+#            newGLedges = flux_array[t, allEdges] == 0
+#            flux_array[t, prevGLedges] = 0.0
+#            for m in newGLedges:
+#                c1 = cOnE[m,0]-1
+#                c2 = cOnE[m,1]-1
+#                if (((cellMask_grounded[t,c1]==1) and (cellMask_floating[t,c2]==1)) or
+#                    ((cellMask_grounded[t,c2]==1) and (cellMask_floating[t,c1]==1))):
+#                    # find sign of flux.  positive velo goes from cell 1 to cell 2
+#                    if cellMask_grounded[t,c1]==1:
+#                        GLFsign=1.0 # will yield positive flux for velocity from grounded to floating
+#                    else:
+#                        GLFsign=-1.0
+#                    flux_array[t,m] = (lnv[m,:]*lt[m,:]).sum() * GLFsign
+
+
+
+
+
+if not 'myGLF2d' in f.variables:
+      f.createVariable('myGLF2d', 'd', ('Time','nEdges')) # Note this field is on edges - won't show up in Paraview
+f.variables['myGLF2d'][:]=flux_array
+
+# Calculate scalar GLF values
+myGLF = np.zeros(deltat.shape)
+for t in range(1,len(deltat)):
+    myGLF[t] = (flux_array[t,:]*dvEdge).sum() #units of m3/s
+
 
 
 
