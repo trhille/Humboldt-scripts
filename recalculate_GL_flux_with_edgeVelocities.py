@@ -12,6 +12,8 @@ import matplotlib.pyplot as plt
 import time
 import pickle
 from optparse import OptionParser
+from os.path import exists
+
 
 parser = OptionParser(description=__doc__)
 parser.add_option("-d", dest="runDir", help="directory for plotting", metavar="FILENAME")
@@ -30,7 +32,10 @@ except:
 # There are two reasons for this: first, to avoid inadvertently corrupting
 # or clobbering the hard-won output file; second, because the output files
 # are often so large that it is prohibitively slow to write to them.
-g = Dataset(runDir + '/masks.nc', mode='r+')
+if exists(runDir + '/masks.nc'):
+    g = Dataset(runDir + '/masks.nc', mode='r+')
+else:
+    g = Dataset(runDir + '/masks.nc', mode='w')
 
 f.set_auto_mask(False)
 
