@@ -26,6 +26,10 @@ try:
 except:
     f = Dataset(runDir + '/output_all_timesteps.nc', 'r')
 
+# We will write out newly calculated fields to a separate netCDF file.
+# There are two reasons for this: first, to avoid inadvertently corrupting
+# or clobbering the hard-won output file; second, because the output files
+# are often so large that it is prohibitively slow to write to them.
 g = Dataset(runDir + '/masks.nc', mode='r+')
 
 f.set_auto_mask(False)
@@ -327,7 +331,8 @@ sfcMassBalPlot, = axs[0].plot(GLyr + 2007., np.cumsum(sfcMassBalVolFlux), c='tab
 calvingPlot, = axs[0].plot(GLyr + 2007., np.cumsum(-calvingVolFlux), c='tab:green', label='grounded calving')
 faceMeltPlot, = axs[0].plot(GLyr + 2007., np.cumsum(-faceMeltVolFlux), c='tab:purple', label='face-melt')
 Glflux_as_residual_plot = axs[0].plot(GLyr + 2007., GLflux_as_residual, c='magenta', label='GL flux as residual')
-plt.ylabel('cumulative volume change')
+axs[0].set_ylabel('cumulative volume change')
+axs[0].grid()
 axs[0].legend(loc='best', fontsize=6)
 
 # Plot fractional difference on log scale on one vertical axis
