@@ -43,7 +43,7 @@ nCells = f.dimensions['nCells'].size
 nEdges = f.dimensions['nEdges'].size
 GLyr = f.variables['daysSinceStart'][:] / 365.
 cellAreaArray = np.tile(areaCell, (np.shape(thk)[0],1))
-
+deltatArray = np.tile(deltat, (nCells, 1)).transpose()
 #f.close()
 # Find grounding line cells that are not dynamic margin. This is the true
 # grounding line (i.e., ice goes afloat as it passes this edge).
@@ -292,7 +292,14 @@ totalGLflux = np.sum(GLfluxOnEdges, axis=1)
 calvingVolFlux = np.sum(calvingThickness * cellMask_grounded * cellAreaArray,axis=1) #m^3
 faceMeltVolFlux = np.sum(faceMeltingThickness * cellAreaArray,axis=1) # m^3
 sfcMassBalVolFlux = np.sum(sfcMassBal * cellMask_grounded * cellAreaArray, axis=1) / 910. * deltat
+# Limit BMB to melting ice that is actually there. Sometimes a numerical
+# instability on one thin marginal cell creates BMB that is many orders
+# of magnitude larger than the ice thickness in that cell. This should
+# be dealt with in the model code, but deal with it here for now.
+badBasalMassBalInd = np.where( np.abs(basalMassBal) > thk * 910. / deltatArray )
+basalMassBal[badBasalMassBalInd] = (thk * 910. / deltatArray)[badBasalMassBalInd]
 basalMassBalVolFlux = np.sum(basalMassBal * cellMask_grounded * cellAreaArray, axis=1) / 910. * deltat
+
 GLflux_as_residual = ( np.cumsum(np.gradient(totalGroundedVol)) -
                        np.cumsum(basalMassBalVolFlux) -
                        np.cumsum(sfcMassBalVolFlux) -
