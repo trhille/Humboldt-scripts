@@ -13,7 +13,8 @@ import time
 import pickle
 
 
-f = Dataset('/global/cscratch1/sd/trhille/Humboldt_1to10km_r04_20210615/m5/MIROC5/VM170_shelfMelt20myr/debug_groundingLineFlux/output_editable2.nc', 'r+')
+f = Dataset('/lustre/scratch4/turquoise/trhille/debug_groundingLineFlux/tmp.nc', 'r+')
+g = Dataset('/lustre/scratch4/turquoise/trhille/debug_groundingLineFlux/tmpmasks.nc', 'w')
 #f = Dataset('output_all_timesteps.nc', 'r+')
 
 f.set_auto_mask(False)
@@ -112,7 +113,7 @@ if doCalc:
                cellMask_grounded[iTime, iCell] = 1  # add this cell to groundedMask
                cellMask_floating[iTime, iCell] = 0  # remove it from floatMask
    toc = time.time()
-   print('Finished adding non-dynamic cells to groundedMask in {} s'.format(toc - tic))
+   print('Finished adding non-dynamic cells to groundedMask in {:0.2f} s'.format(toc - tic))
 
    # Add subglacial lakes to the grounded mask. Do this by starting with
    # a seedMask of floating cells that have an ocean open or non-dynamic
@@ -180,18 +181,22 @@ if doCalc:
                    strandedCellCount += 1
    toc = time.time()
    print('finished adding {} stranded '.format(strandedCellCount) +
-         'cells to grounded and float masks in {} s'.format(toc - tic))
+         'cells to grounded and float masks in {:0.2f} s'.format(toc - tic))
 
    tic = time.time()
    print('Writing masks to .nc file.')
    # add some variables to the output file so we can write out masks for debugging/viz
-   if not 'cellMask_grounded' in f.variables:
-      f.createVariable('cellMask_grounded', 'd', ('Time','nCells'))
-   if not 'cellMask_floating' in f.variables:
-      f.createVariable('cellMask_floating', 'd', ('Time','nCells'))
+   if not 'nCells' in g.dimensions:
+      g.createDimension('nCells', nCells)
+   if not 'Time' in g.dimensions:
+      g.createDimension('Time', len(deltat))
+   if not 'cellMask_grounded' in g.variables:
+      g.createVariable('cellMask_grounded', 'd', ('Time','nCells'))
+   if not 'cellMask_floating' in g.variables:
+      g.createVariable('cellMask_floating', 'd', ('Time','nCells'))
    # Save the final masks
-   f.variables['cellMask_grounded'][:]=cellMask_grounded[:]
-   f.variables['cellMask_floating'][:]=cellMask_floating[:]
+   g.variables['cellMask_grounded'][:]=cellMask_grounded[:]
+   g.variables['cellMask_floating'][:]=cellMask_floating[:]
    toc = time.time()
    print('Finished writing masks to .nc file in {:0.2f} s'.format(toc-tic))
 else:
@@ -199,15 +204,17 @@ else:
    cellMask_grounded[:] = f.variables['cellMask_grounded'][:]
    cellMask_floating[:] = f.variables['cellMask_floating'][:]
 
-
+tic = time.time()
 print('Calculating grToFlt')
 grToFlt = np.zeros(thk.shape)
 for t in range(1,len(deltat)):
     grToFlt[t-1,:]  = np.logical_and(cellMask_grounded[t-1], cellMask_floating[t]) * thk[t,:]
     grToFlt[t-1,:] -= np.logical_and(cellMask_grounded[t], cellMask_floating[t-1]) * thk[t,:]
-if not 'gTOf' in f.variables:
-    f.createVariable('gTOf', 'd', ('Time','nCells'))
-f.variables['gTOf'][:]=grToFlt
+toc = time.time()
+print('finished calcuting grToFLt in {:0.2f} s'.format(toc-tic))
+if not 'gTOf' in g.variables:
+    g.createVariable('gTOf', 'd', ('Time','nCells'))
+g.variables['gTOf'][:]=grToFlt
 
 g2f = (grToFlt * cellAreaArray).sum(axis=1) # m3
 
@@ -232,7 +239,7 @@ for t in range(1,len(deltat)):
                 GLFsign=-1.0
             flux_array[t,e] = (lnv[e,:]*lt[e,:]).sum() * GLFsign
 toc = time.time()
-print('Finished GLF calc in {} s'.format(toc - tic))
+print('Finished GLF calc in {:0.2f} s'.format(toc - tic))
 
 
 # remove GLF on masked cells
@@ -261,10 +268,12 @@ print("cleaning GLF")
 
 
 
+if not 'nEdges' in g.dimensions:
+   g.createDimension('nEdges', nEdges)
+if not 'myGLF2d' in g.variables:
+   g.createVariable('myGLF2d', 'd', ('Time','nEdges')) # Note this field is on edges - won't show up in Paraview
 
-if not 'myGLF2d' in f.variables:
-      f.createVariable('myGLF2d', 'd', ('Time','nEdges')) # Note this field is on edges - won't show up in Paraview
-f.variables['myGLF2d'][:]=flux_array
+g.variables['myGLF2d'][:]=flux_array
 
 # Calculate scalar GLF values
 myGLF = np.zeros(deltat.shape)
@@ -323,5 +332,7 @@ print('RMSE between residual and myGLF +G2F: {:0.2f}'.format(RMSE))
 #axs[2].plot(GLyr + 2007., (thk * cellMask_grounded * cellAreaArray).sum(axis=1), '-r')
 #plt.ylabel('grounded vol')
 
+f.close()
+g.close()
 
 plt.show()
