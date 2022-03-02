@@ -11,10 +11,21 @@ from netCDF4 import Dataset
 import matplotlib.pyplot as plt
 import time
 import pickle
+from optparse import OptionParser
 
 
-f = Dataset('/lustre/scratch4/turquoise/trhille/debug_groundingLineFlux/tmp.nc', 'r+')
-g = Dataset('/lustre/scratch4/turquoise/trhille/debug_groundingLineFlux/tmpmasks.nc', 'w')
+parser = OptionParser(description=__doc__)
+parser.add_option("-d", dest="runDir", help="directory for plotting", metavar="FILENAME")
+options, args = parser.parse_args()
+
+runDir = options.runDir
+
+try:
+    f = Dataset(runDir + '/output_all_timesteps.nc.cleaned', 'r+')
+except:
+    f = Dataset(runDir + '/output_all_timesteps.nc', 'r+')
+
+g = Dataset(runDir + '/masks.nc', 'w')
 #f = Dataset('output_all_timesteps.nc', 'r+')
 
 f.set_auto_mask(False)
