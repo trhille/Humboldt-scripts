@@ -16,17 +16,23 @@ from optparse import OptionParser
 
 parser = OptionParser(description=__doc__)
 parser.add_option("-d", dest="runDir", help="directory for plotting", metavar="FILENAME")
+parser.add_option("-c", dest="doCalc", help="do masking calculation, True or False")
 options, args = parser.parse_args()
 
 runDir = options.runDir
+doCalc = eval(options.doCalc)
 
 try:
     f = Dataset(runDir + '/output_all_timesteps.nc.cleaned', 'r+')
 except:
     f = Dataset(runDir + '/output_all_timesteps.nc', 'r+')
 
-g = Dataset(runDir + '/masks.nc', 'w')
-#f = Dataset('output_all_timesteps.nc', 'r+')
+if doCalc:  # if doing masking, open in write mode, otherwise in r+
+    mode='w'
+else:
+    mode='r+'
+
+g = Dataset(runDir + '/masks.nc', mode=mode)
 
 f.set_auto_mask(False)
 
@@ -111,7 +117,6 @@ cellMask_grounded = cellMask_groundedKeep.copy()
 cellMask_dynamic = (cellMask & dynamicIceValue) // dynamicIceValue
 cellMask_nondynamic = np.logical_not(cellMask_dynamic) * cellMask_ice
 
-doCalc=True
 if doCalc:
    print('Adding non-dynamic cells neighboring grounded ice to groundedMask')
    tic = time.time()
@@ -212,8 +217,8 @@ if doCalc:
    print('Finished writing masks to .nc file in {:0.2f} s'.format(toc-tic))
 else:
    # load the masks from the file where we should have written them previously.
-   cellMask_grounded[:] = f.variables['cellMask_grounded'][:]
-   cellMask_floating[:] = f.variables['cellMask_floating'][:]
+   cellMask_grounded[:] = g.variables['cellMask_grounded'][:]
+   cellMask_floating[:] = g.variables['cellMask_floating'][:]
 
 tic = time.time()
 print('Calculating grToFlt')
@@ -291,9 +296,6 @@ myGLF = np.zeros(deltat.shape)
 for t in range(1,len(deltat)):
     myGLF[t] = (flux_array[t,:]*dvEdge).sum() #units of m3/s
 
-
-
-
 totalGroundedVol = np.sum(thk * cellMask_grounded * cellAreaArray, axis=1)
 totalFloatingVol = np.sum(thk * cellMask_floating * cellAreaArray, axis=1)
 # convert to m^3 / yr
@@ -334,9 +336,16 @@ Glflux_as_residual_plot = axs[0].plot(GLyr + 2007., GLflux_as_residual, c='magen
 plt.ylabel('cumulative volume change')
 axs[0].legend(loc='best', fontsize=8)
 
-
+# Plot fractional difference on log scale on one vertical axis
 axs[1].plot(GLyr + 2007., ( ( GLflux_as_residual - (-np.cumsum(myGLF * deltat)-np.cumsum(g2f)) )
-            / (-np.cumsum(myGLF * deltat)-np.cumsum(g2f)) ), label='fractional difference') 
+            / (-np.cumsum(myGLF * deltat)-np.cumsum(g2f)) ), label='fractional difference')
+axs[1].set_ylabel('GL flux fractional difference')
+axs[1].set_yscale('log')
+# Plot difference on the other vertical axis
+ax2 = axs[1].twinx()
+ax2.plot(GLyr + 2007., GLflux_as_residual - (-np.cumsum(myGLF * deltat)-np.cumsum(g2f)), label='difference')
+ax2.set_ylabel('GL flux difference (m$^3$)')
+
 #axs[1].plot(GLyr + 2007., np.cumsum(totalGLflux * deltat), label='cumulative GL flux')
 #axs[1].plot(GLyr + 2007., np.cumsum(myGLF * deltat), label='myGLF')
 #axs[1].plot(GLyr + 2007., np.cumsum(np.gradient(totalFloatingVol)), 'k', label='total floating volume change')
