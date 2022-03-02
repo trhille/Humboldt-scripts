@@ -181,20 +181,23 @@ if doCalc:
    toc = time.time()
    print('finished adding {} stranded '.format(strandedCellCount) +
          'cells to grounded and float masks in {} s'.format(toc - tic))
+
+   tic = time.time()
+   print('Writing masks to .nc file.')
+   # add some variables to the output file so we can write out masks for debugging/viz
+   if not 'cellMask_grounded' in f.variables:
+      f.createVariable('cellMask_grounded', 'd', ('Time','nCells'))
+   if not 'cellMask_floating' in f.variables:
+      f.createVariable('cellMask_floating', 'd', ('Time','nCells'))
+   # Save the final masks
+   f.variables['cellMask_grounded'][:]=cellMask_grounded[:]
+   f.variables['cellMask_floating'][:]=cellMask_floating[:]
+   toc = time.time()
+   print('Finished writing masks to .nc file in {:0.2f} s'.format(toc-tic))
 else:
    # load the masks from the file where we should have written them previously.
    cellMask_grounded[:] = f.variables['cellMask_grounded'][:]
    cellMask_floating[:] = f.variables['cellMask_floating'][:]
-
-
-# add some variables to the output file so we can write out masks for debugging/viz
-if not 'cellMask_grounded' in f.variables:
-   f.createVariable('cellMask_grounded', 'd', ('Time','nCells'))
-if not 'cellMask_floating' in f.variables:
-   f.createVariable('cellMask_floating', 'd', ('Time','nCells'))
-# Save the final masks
-f.variables['cellMask_grounded'][:]=cellMask_grounded[:]
-f.variables['cellMask_floating'][:]=cellMask_floating[:]
 
 
 print('Calculating grToFlt')
@@ -287,6 +290,8 @@ GLflux_as_residual = ( np.cumsum(np.gradient(totalGroundedVol)) -
                        np.cumsum(-calvingVolFlux) -
                        np.cumsum(-faceMeltVolFlux) )
 
+RMSE = np.sqrt(np.mean( GLflux_as_residual - (-np.cumsum(myGLF * deltat)-np.cumsum(g2f) )))
+
 fig, axs = plt.subplots(2)
 axs[0].plot(GLyr + 2007., -np.cumsum(g2f), 'g', label='G2F')
 axs[0].plot(GLyr + 2007., -np.cumsum(totalGLflux * deltat), 'r', label='cumulative GL flux')
@@ -302,12 +307,16 @@ Glflux_as_residual_plot = axs[0].plot(GLyr + 2007., GLflux_as_residual, c='magen
 plt.ylabel('cumulative volume change')
 axs[0].legend(loc='best', fontsize=8)
 
-axs[1].plot(GLyr + 2007., np.cumsum(totalGLflux * deltat), label='cumulative GL flux')
-axs[1].plot(GLyr + 2007., np.cumsum(myGLF * deltat), label='myGLF')
-axs[1].plot(GLyr + 2007., np.cumsum(np.gradient(totalFloatingVol)), 'k', label='total floating volume change')
-plt.ylabel('cumulative volume change')
+
+axs[1].plot(GLyr + 2007., ( ( GLflux_as_residual - (-np.cumsum(myGLF * deltat)-np.cumsum(g2f)) )
+            / (-np.cumsum(myGLF * deltat)-np.cumsum(g2f)) ), label='fractional difference') 
+#axs[1].plot(GLyr + 2007., np.cumsum(totalGLflux * deltat), label='cumulative GL flux')
+#axs[1].plot(GLyr + 2007., np.cumsum(myGLF * deltat), label='myGLF')
+#axs[1].plot(GLyr + 2007., np.cumsum(np.gradient(totalFloatingVol)), 'k', label='total floating volume change')
+plt.ylabel('fractional difference')
 axs[1].legend()
 
+print('RMSE between residual and myGLF +G2F: {:0.2f}'.format(RMSE))
 
 #axs[1].plot(GLyr + 2007., (thk * cellMask_floating * cellAreaArray).sum(axis=1), '-b')
 #plt.ylabel('floating vol')
