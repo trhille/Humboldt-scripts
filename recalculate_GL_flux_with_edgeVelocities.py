@@ -13,7 +13,6 @@ import time
 import pickle
 from optparse import OptionParser
 
-
 parser = OptionParser(description=__doc__)
 parser.add_option("-d", dest="runDir", help="directory for plotting", metavar="FILENAME")
 parser.add_option("-c", dest="doCalc", help="do masking calculation, True or False")
@@ -23,16 +22,11 @@ runDir = options.runDir
 doCalc = eval(options.doCalc)
 
 try:
-    f = Dataset(runDir + '/output_all_timesteps.nc.cleaned', 'r+')
+    f = Dataset(runDir + '/output_all_timesteps.nc.cleaned', 'r')
 except:
-    f = Dataset(runDir + '/output_all_timesteps.nc', 'r+')
+    f = Dataset(runDir + '/output_all_timesteps.nc', 'r')
 
-if doCalc:  # if doing masking, open in write mode, otherwise in r+
-    mode='w'
-else:
-    mode='r+'
-
-g = Dataset(runDir + '/masks.nc', mode=mode)
+g = Dataset(runDir + '/masks.nc', mode='r+')
 
 f.set_auto_mask(False)
 
@@ -220,76 +214,75 @@ else:
    cellMask_grounded[:] = g.variables['cellMask_grounded'][:]
    cellMask_floating[:] = g.variables['cellMask_floating'][:]
 
-tic = time.time()
-print('Calculating grToFlt')
-grToFlt = np.zeros(thk.shape)
-for t in range(1,len(deltat)):
-    grToFlt[t-1,:]  = np.logical_and(cellMask_grounded[t-1], cellMask_floating[t]) * thk[t,:]
-    grToFlt[t-1,:] -= np.logical_and(cellMask_grounded[t], cellMask_floating[t-1]) * thk[t,:]
-toc = time.time()
-print('finished calcuting grToFLt in {:0.2f} s'.format(toc-tic))
 if not 'gTOf' in g.variables:
+    tic = time.time()
+    print('Calculating grToFlt')
+    grToFlt = np.zeros(thk.shape)
+    for t in range(1,len(deltat)):
+        grToFlt[t-1,:]  = np.logical_and(cellMask_grounded[t-1], cellMask_floating[t]) * thk[t,:]
+        grToFlt[t-1,:] -= np.logical_and(cellMask_grounded[t], cellMask_floating[t-1]) * thk[t,:]
+    toc = time.time()
+    print('finished calcuting grToFLt in {:0.2f} s'.format(toc-tic))
     g.createVariable('gTOf', 'd', ('Time','nCells'))
-g.variables['gTOf'][:]=grToFlt
+    g.variables['gTOf'][:]=grToFlt
+else:
+    grToFlt = g.variables['gTOf'][:]
 
 g2f = (grToFlt * cellAreaArray).sum(axis=1) # m3
 
 
-
-print('Calculating GLF from scratch')
-tic = time.time()
-flux_array = np.zeros((len(deltat), nEdges))
-for t in range(1,len(deltat)):
-    maskTime = t-1
-    lnv =  f.variables['layerNormalVelocity'][t,:,:]
-    lt  =  f.variables['layerThicknessEdge'][t,:,:]
-    for e in range(nEdges):
-        c1 = cOnE[e,0]-1
-        c2 = cOnE[e,1]-1
-        if (((cellMask_grounded[maskTime,c1]==1) and (cellMask_floating[maskTime,c2]==1)) or
-            ((cellMask_grounded[maskTime,c2]==1) and (cellMask_floating[maskTime,c1]==1))):
-            # find sign of flux.  positive velo goes from cell 1 to cell 2
-            if cellMask_grounded[maskTime,c1]==1:
-                GLFsign=1.0 # will yield positive flux for velocity from grounded to floating
-            else:
-                GLFsign=-1.0
-            flux_array[t,e] = (lnv[e,:]*lt[e,:]).sum() * GLFsign
-toc = time.time()
-print('Finished GLF calc in {:0.2f} s'.format(toc - tic))
-
-
-# remove GLF on masked cells
-print("cleaning GLF")
-#for t in range(1,len(deltat)):
-#    lnv =  f.variables['layerNormalVelocity'][t,:,:]
-#    lt  =  f.variables['layerThicknessEdge'][t,:,:]
-#    for iCell in range(nCells):
-#        if grToFlt[t-1,iCell] != 0.0:
-#            allEdges = edgesOnCell[iCell, :nEdgesOnCell[iCell]]
-#            prevGLedges = flux_array[t, allEdges] != 0
-#            newGLedges = flux_array[t, allEdges] == 0
-#            flux_array[t, prevGLedges] = 0.0
-#            for m in newGLedges:
-#                c1 = cOnE[m,0]-1
-#                c2 = cOnE[m,1]-1
-#                if (((cellMask_grounded[t,c1]==1) and (cellMask_floating[t,c2]==1)) or
-#                    ((cellMask_grounded[t,c2]==1) and (cellMask_floating[t,c1]==1))):
-#                    # find sign of flux.  positive velo goes from cell 1 to cell 2
-#                    if cellMask_grounded[t,c1]==1:
-#                        GLFsign=1.0 # will yield positive flux for velocity from grounded to floating
-#                    else:
-#                        GLFsign=-1.0
-#                    flux_array[t,m] = (lnv[m,:]*lt[m,:]).sum() * GLFsign
-
-
-
-
 if not 'nEdges' in g.dimensions:
-   g.createDimension('nEdges', nEdges)
-if not 'myGLF2d' in g.variables:
-   g.createVariable('myGLF2d', 'd', ('Time','nEdges')) # Note this field is on edges - won't show up in Paraview
+    g.createDimension('nEdges', nEdges)
 
-g.variables['myGLF2d'][:]=flux_array
+if not 'myGLF2d' in g.variables:
+    g.createVariable('myGLF2d', 'd', ('Time','nEdges')) # Note this field is on edges - won't show up in Paraview
+    print('Calculating GLF from scratch')
+    tic = time.time()
+    flux_array = np.zeros((len(deltat), nEdges))
+    for t in range(1,len(deltat)):
+        maskTime = t-1
+        lnv =  f.variables['layerNormalVelocity'][t,:,:]
+        lt  =  f.variables['layerThicknessEdge'][t,:,:]
+        for e in range(nEdges):
+            c1 = cOnE[e,0]-1
+            c2 = cOnE[e,1]-1
+            if (((cellMask_grounded[maskTime,c1]==1) and (cellMask_floating[maskTime,c2]==1)) or
+                ((cellMask_grounded[maskTime,c2]==1) and (cellMask_floating[maskTime,c1]==1))):
+                # find sign of flux.  positive velo goes from cell 1 to cell 2
+                if cellMask_grounded[maskTime,c1]==1:
+                    GLFsign=1.0 # will yield positive flux for velocity from grounded to floating
+                else:
+                    GLFsign=-1.0
+                flux_array[t,e] = (lnv[e,:]*lt[e,:]).sum() * GLFsign
+    toc = time.time()
+    print('Finished GLF calc in {:0.2f} s'.format(toc - tic))
+
+    # remove GLF on masked cells
+    print("cleaning GLF")
+    #for t in range(1,len(deltat)):
+    #    lnv =  f.variables['layerNormalVelocity'][t,:,:]
+    #    lt  =  f.variables['layerThicknessEdge'][t,:,:]
+    #    for iCell in range(nCells):
+    #        if grToFlt[t-1,iCell] != 0.0:
+    #            allEdges = edgesOnCell[iCell, :nEdgesOnCell[iCell]]
+    #            prevGLedges = flux_array[t, allEdges] != 0
+    #            newGLedges = flux_array[t, allEdges] == 0
+    #            flux_array[t, prevGLedges] = 0.0
+    #            for m in newGLedges:
+    #                c1 = cOnE[m,0]-1
+    #                c2 = cOnE[m,1]-1
+    #                if (((cellMask_grounded[t,c1]==1) and (cellMask_floating[t,c2]==1)) or
+    #                    ((cellMask_grounded[t,c2]==1) and (cellMask_floating[t,c1]==1))):
+    #                    # find sign of flux.  positive velo goes from cell 1 to cell 2
+    #                    if cellMask_grounded[t,c1]==1:
+    #                        GLFsign=1.0 # will yield positive flux for velocity from grounded to floating
+    #                    else:
+    #                        GLFsign=-1.0
+    #                    flux_array[t,m] = (lnv[m,:]*lt[m,:]).sum() * GLFsign
+
+    g.variables['myGLF2d'][:]=flux_array
+else:
+    flux_array=g.variables['myGLF2d'][:]
 
 # Calculate scalar GLF values
 myGLF = np.zeros(deltat.shape)
@@ -321,7 +314,8 @@ GLflux_as_residual = ( np.cumsum(np.gradient(totalGroundedVol)) -
 
 RMSE = np.sqrt(np.mean( GLflux_as_residual - (-np.cumsum(myGLF * deltat)-np.cumsum(g2f) )))
 
-fig, axs = plt.subplots(2)
+fig, axs = plt.subplots(2, figsize=(6,8))
+axs[0].set_title(runDir)
 axs[0].plot(GLyr + 2007., -np.cumsum(g2f), 'g', label='G2F')
 axs[0].plot(GLyr + 2007., -np.cumsum(totalGLflux * deltat), 'r', label='cumulative GL flux')
 axs[0].plot(GLyr + 2007., -np.cumsum(totalGLflux * deltat)-np.cumsum(g2f), 'r--', label='cumulative GL flux + G2F')
@@ -334,23 +328,21 @@ calvingPlot, = axs[0].plot(GLyr + 2007., np.cumsum(-calvingVolFlux), c='tab:gree
 faceMeltPlot, = axs[0].plot(GLyr + 2007., np.cumsum(-faceMeltVolFlux), c='tab:purple', label='face-melt')
 Glflux_as_residual_plot = axs[0].plot(GLyr + 2007., GLflux_as_residual, c='magenta', label='GL flux as residual')
 plt.ylabel('cumulative volume change')
-axs[0].legend(loc='best', fontsize=8)
+axs[0].legend(loc='best', fontsize=6)
 
 # Plot fractional difference on log scale on one vertical axis
-axs[1].plot(GLyr + 2007., ( ( GLflux_as_residual - (-np.cumsum(myGLF * deltat)-np.cumsum(g2f)) )
-            / (-np.cumsum(myGLF * deltat)-np.cumsum(g2f)) ), label='fractional difference')
-axs[1].set_ylabel('GL flux fractional difference')
+axs[1].plot(GLyr + 2007., np.abs( ( GLflux_as_residual - (-np.cumsum(myGLF * deltat)-np.cumsum(g2f)) )
+            / (-np.cumsum(myGLF * deltat)-np.cumsum(g2f)) ), c='tab:orange')
+axs[1].set_ylabel('GL flux fractional difference', c='tab:orange')
 axs[1].set_yscale('log')
 # Plot difference on the other vertical axis
 ax2 = axs[1].twinx()
-ax2.plot(GLyr + 2007., GLflux_as_residual - (-np.cumsum(myGLF * deltat)-np.cumsum(g2f)), label='difference')
-ax2.set_ylabel('GL flux difference (m$^3$)')
+ax2.plot(GLyr + 2007., GLflux_as_residual - (-np.cumsum(myGLF * deltat)-np.cumsum(g2f)), c='tab:blue')
+ax2.set_ylabel('GL flux abs difference (m$^3$)', c='tab:blue')
 
 #axs[1].plot(GLyr + 2007., np.cumsum(totalGLflux * deltat), label='cumulative GL flux')
 #axs[1].plot(GLyr + 2007., np.cumsum(myGLF * deltat), label='myGLF')
 #axs[1].plot(GLyr + 2007., np.cumsum(np.gradient(totalFloatingVol)), 'k', label='total floating volume change')
-plt.ylabel('fractional difference')
-axs[1].legend()
 
 print('RMSE between residual and myGLF +G2F: {:0.2f}'.format(RMSE))
 
@@ -361,5 +353,5 @@ print('RMSE between residual and myGLF +G2F: {:0.2f}'.format(RMSE))
 
 f.close()
 g.close()
-
+#fig.savefig(runDir.replace('/','_'), dpi=400, bbox_inches='tight')
 plt.show()
