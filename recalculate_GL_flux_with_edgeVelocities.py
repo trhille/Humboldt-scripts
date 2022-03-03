@@ -38,6 +38,7 @@ else:
     g = Dataset(runDir + '/masks.nc', mode='w')
 
 f.set_auto_mask(False)
+g.set_auto_mask(False)
 
 fluxAcrossGroundingLine = f.variables["fluxAcrossGroundingLine"][:]
 thk = f.variables['thickness'][:]
@@ -321,7 +322,7 @@ GLflux_as_residual = ( totalGroundedVol-totalGroundedVol[0] -
                        np.cumsum(-calvingVolFlux) -
                        np.cumsum(-faceMeltVolFlux) )
 
-RMSE = np.sqrt(np.mean( GLflux_as_residual - (-np.cumsum(myGLF * deltat)-np.cumsum(g2f) )))
+RMSE = np.sqrt(np.mean( (GLflux_as_residual - (-np.cumsum(myGLF * deltat)-np.cumsum(g2f)) )**2))
 
 fig, axs = plt.subplots(2, figsize=(6,8))
 axs[0].set_title(runDir)
@@ -341,8 +342,9 @@ axs[0].grid()
 axs[0].legend(loc='best', fontsize=6)
 
 # Plot fractional difference on log scale on one vertical axis
-axs[1].plot(GLyr + 2007., np.abs( ( GLflux_as_residual - (-np.cumsum(myGLF * deltat)-np.cumsum(g2f)) )
-            / (-np.cumsum(myGLF * deltat)-np.cumsum(g2f)) ), c='tab:orange')
+axs[1].plot(GLyr[1::] + 2007., np.abs( ( GLflux_as_residual[1::] -
+            (-np.cumsum(myGLF[1::] * deltat[1::])-np.cumsum(g2f[1::])) )
+            / (-np.cumsum(myGLF[1::] * deltat[1::])-np.cumsum(g2f[1::])) ), c='tab:orange')
 axs[1].set_ylabel('GL flux fractional difference', c='tab:orange')
 axs[1].set_yscale('log')
 # Plot difference on the other vertical axis
