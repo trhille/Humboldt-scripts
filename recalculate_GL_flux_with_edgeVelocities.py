@@ -227,7 +227,7 @@ if not 'gTOf' in g.variables:
     tic = time.time()
     print('Calculating grToFlt')
     grToFlt = np.zeros(thk.shape)
-    for t in range(1,len(deltat)):
+    for t in range(2,len(deltat)):
         grToFlt[t-1,:]  = np.logical_and(cellMask_grounded[t-1], cellMask_floating[t]) * thk[t,:]
         grToFlt[t-1,:] -= np.logical_and(cellMask_grounded[t], cellMask_floating[t-1]) * thk[t,:]
     toc = time.time()
@@ -315,7 +315,7 @@ badBasalMassBalInd = np.where( np.abs(basalMassBal) > thk * 910. / deltatArray )
 basalMassBal[badBasalMassBalInd] = (thk * 910. / deltatArray)[badBasalMassBalInd]
 basalMassBalVolFlux = np.sum(basalMassBal * cellMask_grounded * cellAreaArray, axis=1) / 910. * deltat
 
-GLflux_as_residual = ( np.cumsum(np.gradient(totalGroundedVol)) -
+GLflux_as_residual = ( totalGroundedVol-totalGroundedVol[0] -
                        np.cumsum(basalMassBalVolFlux) -
                        np.cumsum(sfcMassBalVolFlux) -
                        np.cumsum(-calvingVolFlux) -
@@ -330,7 +330,7 @@ axs[0].plot(GLyr + 2007., -np.cumsum(totalGLflux * deltat), 'r', label='cumulati
 axs[0].plot(GLyr + 2007., -np.cumsum(totalGLflux * deltat)-np.cumsum(g2f), 'r--', label='cumulative GL flux + G2F')
 axs[0].plot(GLyr + 2007., -np.cumsum(myGLF * deltat), 'b', label='myGLF')
 axs[0].plot(GLyr + 2007., -np.cumsum(myGLF * deltat)-np.cumsum(g2f), 'b--', label='myGLF+G2F')
-axs[0].plot(GLyr + 2007., np.cumsum(np.gradient(totalGroundedVol)), 'k', label='total grounded volume change')
+axs[0].plot(GLyr + 2007., totalGroundedVol-totalGroundedVol[0], 'k', label='total grounded volume change')
 basalMassBalPlot, = axs[0].plot(GLyr + 2007., np.cumsum(basalMassBalVolFlux), c='tab:cyan', label='BMB')
 sfcMassBalPlot, = axs[0].plot(GLyr + 2007., np.cumsum(sfcMassBalVolFlux), c='tab:pink', label='SMB')
 calvingPlot, = axs[0].plot(GLyr + 2007., np.cumsum(-calvingVolFlux), c='tab:green', label='grounded calving')
