@@ -302,6 +302,25 @@ for ii, filename in enumerate(filenames):
             totalVol = f.variables['totalVol'][:] / 1.e12
             f.close()
 
+        # for validation
+        ff = Dataset('output_all_timesteps_with_initial_solve.nc.cleaned')
+        deltat = ff.variables['deltat'][:]
+        dvEdge = ff.variables['dvEdge'][:]
+        areaCell = ff.variables['areaCell'][:]
+        cellAreaArray = np.tile(areaCell, (ff.dimensions['Time'].size,1))
+        gg = Dataset('masks_with_initial_solve.nc')
+        flux_array=gg.variables['myGLF2d'][:]
+        grToFlt = gg.variables['gTOf'][:]
+        g2f = (grToFlt * cellAreaArray).sum(axis=1) # m3
+        # Calculate scalar GLF values
+        myGLF = np.zeros(deltat.shape)
+        for t in range(1,len(deltat)):
+            myGLF[t] = (flux_array[t,:]*dvEdge).sum() #units of m3/s
+        myGLF /= 1.e12
+        g2f /= 1.e12
+
+        ff.close()
+        gg.close()
         #Now plot the budgets!
         for plotAx in [inset, ax]:
             if mask is groundedMask:
@@ -309,12 +328,24 @@ for ii, filename in enumerate(filenames):
                 # in globalStats.nc is not what we want here.
 
                 GLfluxPlot, = plotAx.plot(yr, GLvolFlux, c='tab:orange', linestyle=lineStyle)  # uncomment for comparison with globalStats
+                myGLFplot, = plotAx.plot(yr, (-np.cumsum(myGLF * deltat)-np.cumsum(g2f)), 'b--', label='myGLF+G2F')
                 faceMeltPlot, = plotAx.plot(yr, np.cumsum(-faceMeltVolFlux), c='tab:purple', linestyle=lineStyle)
-                if plotAx is inset: inset.set_ylim(top=0.075, bottom=-.25)
+                if plotAx is inset:
+                    inset.set_ylim(top=0.075, bottom=-.25)
+                else:
+                    fig2,ax2 = plt.subplots(1,1)
+                    ax2.plot(yr, np.abs((GLvolFlux - (-np.cumsum(myGLF * deltat)-np.cumsum(g2f)))))
+                                         #/ (-np.cumsum(myGLF * deltat)-np.cumsum(g2f))), c='r')
+                    ax2.set_yscale('log')
             elif mask is floatMask:
                 GLfluxPlot, = plotAx.plot(yr, GLvolFlux, c='tab:orange', linestyle=lineStyle)
+                myGLFplot, = plotAx.plot(yr, -(-np.cumsum(myGLF * deltat)-np.cumsum(g2f)), 'b--', label='myGLF+G2F')
                 if plotAx is inset:
                     inset.set_ylim(top=.07, bottom=-.03)
+                else:
+                    ax2.plot(yr, np.abs((GLvolFlux - -(-np.cumsum(myGLF * deltat)-np.cumsum(g2f)))
+                                        / -(-np.cumsum(myGLF * deltat)-np.cumsum(g2f))), 'b--')
+                    ax2.set_yscale('log')
 
             basalMassBalPlot, = plotAx.plot(yr, np.cumsum(basalMassBalVolFlux), c='tab:cyan', linestyle=lineStyle)
             sfcMassBalPlot, = plotAx.plot(yr, np.cumsum(sfcMassBalVolFlux), c='tab:pink', linestyle=lineStyle)
