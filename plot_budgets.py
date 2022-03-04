@@ -249,18 +249,18 @@ for ii, filename in enumerate(filenames):
             if mask is groundedMask:
                 title = 'Grounded Ice'
                 maskName = 'groundedMask'
-                GLflux_as_residual = ( totalVol-totalVol[0] -
-                                       np.cumsum(basalMassBalVolFlux) -
-                                       np.cumsum(sfcMassBalVolFlux) -
-                                       np.cumsum(-calvingVolFlux) -
-                                       np.cumsum(-faceMeltVolFlux) )
+                GLvolFlux = ( totalVol-totalVol[0] -
+                              np.cumsum(basalMassBalVolFlux) -
+                              np.cumsum(sfcMassBalVolFlux) -
+                              np.cumsum(-calvingVolFlux) -
+                              np.cumsum(-faceMeltVolFlux) )
             elif mask is floatMask:
                 title = 'Floating Ice'
                 maskName = 'floatMask'
-                GLflux_as_residual = ( totalVol-totalVol[0] -
-                                       np.cumsum(basalMassBalVolFlux) -
-                                       np.cumsum(sfcMassBalVolFlux) -
-                                       np.cumsum(-calvingVolFlux) )
+                GLvolFlux = ( totalVol-totalVol[0] -
+                              np.cumsum(basalMassBalVolFlux) -
+                              np.cumsum(sfcMassBalVolFlux) -
+                              np.cumsum(-calvingVolFlux) )
 
             #Now save these timeseries so we don't have to calculate them from the output files every time
             outfile = filename.replace('output_all_timesteps', 'massBudgets_'+maskName)
@@ -276,7 +276,7 @@ for ii, filename in enumerate(filenames):
             o.createVariable('totalVol', 'f', 'Time')
 
             o.variables['daysSinceStart'][:] = daysSinceStart
-            o.variables['GLvolFlux'][:] = GLflux_as_residual
+            o.variables['GLvolFlux'][:] = GLvolFlux
             o.variables['sfcMassBalVolFlux'][:] = sfcMassBalVolFlux
             o.variables['basalMassBalVolFlux'][:] = basalMassBalVolFlux
             o.variables['faceMeltVolFlux'][:] = faceMeltVolFlux
@@ -308,12 +308,13 @@ for ii, filename in enumerate(filenames):
                 # Calculate grounding line flux as the residual in the mass budget because groundingLineFlux
                 # in globalStats.nc is not what we want here.
 
-                GLfluxPlot, = plotAx.plot(yr, GLflux_as_residual, c='tab:orange', linestyle=lineStyle)  # uncomment for comparison with globalStats
+                GLfluxPlot, = plotAx.plot(yr, GLvolFlux, c='tab:orange', linestyle=lineStyle)  # uncomment for comparison with globalStats
                 faceMeltPlot, = plotAx.plot(yr, np.cumsum(-faceMeltVolFlux), c='tab:purple', linestyle=lineStyle)
                 if plotAx is inset: inset.set_ylim(top=0.075, bottom=-.25)
             elif mask is floatMask:
-                GLfluxPlot, = plotAx.plot(yr, GLflux_as_residual, c='tab:orange', linestyle=lineStyle)
-                if plotAx is inset: inset.set_ylim(top=.07, bottom=-.03)
+                GLfluxPlot, = plotAx.plot(yr, GLvolFlux, c='tab:orange', linestyle=lineStyle)
+                if plotAx is inset:
+                    inset.set_ylim(top=.07, bottom=-.03)
 
             basalMassBalPlot, = plotAx.plot(yr, np.cumsum(basalMassBalVolFlux), c='tab:cyan', linestyle=lineStyle)
             sfcMassBalPlot, = plotAx.plot(yr, np.cumsum(sfcMassBalVolFlux), c='tab:pink', linestyle=lineStyle)
