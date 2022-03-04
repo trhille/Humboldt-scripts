@@ -78,11 +78,6 @@ for ii, filename in enumerate(filenames):
         f.set_auto_mask(False)
         print('Calculating mass budgets from {}'.format(filename))
         
-        # Get time variables
-        deltat = np.gradient(f.variables["daysSinceStart"][:]) * s_per_day
-        daysSinceStart = f.variables["daysSinceStart"][:]
-        yr = daysSinceStart / 365. + startYear
-
         # Get mesh variables
         nCells = f.dimensions["nCells"].size
         xCell = f.variables['xCell'][:]
@@ -91,6 +86,12 @@ for ii, filename in enumerate(filenames):
         cellsOnCell = f.variables["cellsOnCell"][:]
         xCell = f.variables["xCell"][:]
         areaCell = f.variables["areaCell"][:]
+
+        # Get time variables
+        deltat = np.gradient(f.variables["daysSinceStart"][:]) * s_per_day
+        deltatArray = np.tile(deltat, (nCells, 1)).transpose()
+        daysSinceStart = f.variables["daysSinceStart"][:]
+        yr = daysSinceStart / 365. + startYear
 
         # Get geometry and budget variables
         thk = f.variables["thickness"][:]
@@ -132,7 +133,8 @@ for ii, filename in enumerate(filenames):
         tic = time.time()
         floodFillMask = cellMask * 0
         for iTime in np.arange(0, len(deltat)):
-            print("Flood filling time level", iTime)
+            if (iTime % 50 == 0):
+                print("Flood filling time level", iTime)
             seedMask = thk[0, :] * 0
             for iCell in np.arange(0, nCells):
                 if floatMask[iTime, iCell] == 1:
@@ -193,9 +195,9 @@ for ii, filename in enumerate(filenames):
         masks = [groundedMask, floatMask]
 
         # write out masks for debugging
-        f.variables['groundedMask'][:] = groundedMask
-        f.variables['floatMask'][:] = floatMask
-        f.variables['SGLmask'][:] = SGLmask
+        # f.variables['groundedMask'][:] = groundedMask
+        # f.variables['floatMask'][:] = floatMask
+        # f.variables['SGLmask'][:] = SGLmask
         f.close()
     else:
         groundedMask ='groundedMask'
@@ -235,6 +237,13 @@ for ii, filename in enumerate(filenames):
             calvingVolFlux = np.sum(calvingThickness * mask * cellAreaArray,axis=1) #m^3
             faceMeltVolFlux = np.sum(faceMeltingThickness * cellAreaArray,axis=1) # m^3
             sfcMassBalVolFlux = np.sum(sfcMassBal * mask * cellAreaArray, axis=1) / 910. * deltat
+
+            # Limit BMB to melting ice that is actually there. Sometimes a numerical
+            # instability on one thin marginal cell creates BMB that is many orders
+            # of magnitude larger than the ice thickness in that cell. This should
+            # be dealt with in the model code, but deal with it here for now.
+            badBasalMassBalInd = np.where( np.abs(basalMassBal) > thk * 910. / deltatArray )
+            basalMassBal[badBasalMassBalInd] = (thk * 910. / deltatArray)[badBasalMassBalInd]
             basalMassBalVolFlux = np.sum(basalMassBal * mask * cellAreaArray, axis=1) / 910. * deltat
 
             if mask is groundedMask:
