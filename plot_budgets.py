@@ -31,7 +31,7 @@ nRows = 2 #nFiles * 2
 nCols = 3 #nFiles
 
 fig, axs = plt.subplots(nrows=nRows, ncols=nCols, sharex=True, sharey='row')
-fig.set_size_inches(15, 12)
+fig.set_size_inches(8, 6)
 insetAxs = []
 budgFig, budgAx = plt.subplots(1,1)
 for ii,ax in enumerate(axs.ravel()):
@@ -230,7 +230,7 @@ for ii, filename in enumerate(filenames):
         colTitle = 'HadGEM2'
     elif 'CNRM' in filename:
         col = 2
-        colTitle = 'CNRM'
+        colTitle = 'CNRM-CM6'
     else:
         col = 0
         colTitle = 'No climate forcing found'
@@ -262,12 +262,8 @@ for ii, filename in enumerate(filenames):
             basalMassBal[badBasalMassBalInd] = (thk * 910. / deltatArray)[badBasalMassBalInd]
             basalMassBalVolFlux = np.sum(basalMassBal * mask * cellAreaArray, axis=1) / 910. * deltat
 
-#            GLvolFlux = ( totalVol-totalVol[0] -
-#                          np.cumsum(basalMassBalVolFlux) -
-#                          np.cumsum(sfcMassBalVolFlux) -
-#                          np.cumsum(-calvingVolFlux) -
-#                          np.cumsum(-faceMeltVolFlux) )
-
+            # Calculate grounding line flux as the residual in the mass budget because groundingLineFlux
+            # in globalStats.nc is not what we want here.
             if mask is groundedMask:
                 title = 'Grounded Ice'
                 maskName = 'groundedMask'
@@ -337,61 +333,24 @@ for ii, filename in enumerate(filenames):
 
         globalBudget[maskName] = np.cumsum(sfcMassBalVolFlux + basalMassBalVolFlux - faceMeltVolFlux - calvingVolFlux)
         globalBudget[maskName + 'TotalVol'] = totalVol
-#        # for validation
-#        if 'massBudgets' in filename:
-#            try:
-#                ff = Dataset(filename.replace('massBudgets', 'output_all_timesteps_with_initial_solve.nc.cleaned'))
-#                gg = Dataset(filename.replace('massBudgets', 'masks_with_initial_solve.nc.cleaned'))
-#            except:
-#                ff = Dataset(filename.replace('massBudgets', 'output_all_timesteps_with_initial_solve.nc'))
-#                gg = Dataset(filename.replace('massBudgets', 'masks_with_initial_solve.nc'))
-#        else:
-#            ff = Dataset(filename, 'r')
-#            gg = Dataset(filename.replace('output_all_timesteps_with_initial_solve', 'masks_with_initial_solve'))
-#
-#        deltat = ff.variables['deltat'][:]
-#        dvEdge = ff.variables['dvEdge'][:]
-#        areaCell = ff.variables['areaCell'][:]
-#        cellAreaArray = np.tile(areaCell, (ff.dimensions['Time'].size,1))
-#        flux_array=gg.variables['myGLF2d'][:]
-#        grToFlt = gg.variables['gTOf'][:]
-#        g2f = (grToFlt * cellAreaArray).sum(axis=1) # m3
-#        # Calculate scalar GLF values
-#        myGLF = np.zeros(deltat.shape)
-#        for t in range(1,len(deltat)):
-#            myGLF[t] = (flux_array[t,:]*dvEdge).sum() #units of m3/s
-#        myGLF /= 1.e12
-#        g2f /= 1.e12
-#
-#        ff.close()
-#        gg.close()
+
         #Now plot the budgets!
         for plotAx in [inset, ax]:
             if mask is groundedMask:
-                # Calculate grounding line flux as the residual in the mass budget because groundingLineFlux
-                # in globalStats.nc is not what we want here.
-
-                GLfluxPlot, = plotAx.plot(yr, GLvolFlux, c='tab:orange', linestyle=lineStyle)  # uncomment for comparison with globalStats
-#                myGLFplot, = plotAx.plot(yr, (-np.cumsum(myGLF * deltat)-np.cumsum(g2f)), 'b--', label='myGLF+G2F')
+                GLfluxPlot, = plotAx.plot(yr, GLvolFlux, c='tab:orange', linestyle=lineStyle)
                 faceMeltPlot, = plotAx.plot(yr, np.cumsum(-faceMeltVolFlux), c='tab:purple', linestyle=lineStyle)
-                axs[row+1,col].plot(yr, -GLvolFlux, c='magenta', linestyle='dotted')
+                # Uncomment line below to plot grounding line flux calculated from
+                # grounded ice mask on the floating mass budget axes, for comparison
+                #axs[row+1,col].plot(yr, -GLvolFlux, c='magenta', linestyle='dotted')
                 if plotAx is inset:
                     inset.set_ylim(top=0.075, bottom=-.25)
-#                else:
-#                    fig2,ax2 = plt.subplots(1,1)
-#                    ax2.plot(yr, np.abs((GLvolFlux - (-np.cumsum(myGLF * deltat)-np.cumsum(g2f)))))
-#                                         / (-np.cumsum(myGLF * deltat)-np.cumsum(g2f))), c='r')
-#                    ax2.set_yscale('log')
             elif mask is floatMask:
                 GLfluxPlot, = plotAx.plot(yr, GLvolFlux, c='tab:orange', linestyle=lineStyle)
-#                myGLFplot, = plotAx.plot(yr, -(-np.cumsum(myGLF * deltat)-np.cumsum(g2f)), 'b--', label='myGLF+G2F')
-                axs[row-1,col].plot(yr, -GLvolFlux, c='magenta', linestyle='dotted')
+                # Uncomment line below to plot grounding line flux calculated from
+                # floating ice mask on the grounded mass budget axes, for comparison
+                #axs[row-1,col].plot(yr, -GLvolFlux, c='magenta', linestyle='dotted')
                 if plotAx is inset:
                     inset.set_ylim(top=.085, bottom=-.055)
-#                else:
-#                    ax2.plot(yr, np.abs((GLvolFlux - -(-np.cumsum(myGLF * deltat)-np.cumsum(g2f)))
-#                                        / -(-np.cumsum(myGLF * deltat)-np.cumsum(g2f))), 'b--')
-#                    ax2.set_yscale('log')
             basalMassBalPlot, = plotAx.plot(yr, np.cumsum(basalMassBalVolFlux), c='tab:cyan', linestyle=lineStyle)
             sfcMassBalPlot, = plotAx.plot(yr, np.cumsum(sfcMassBalVolFlux), c='tab:pink', linestyle=lineStyle)
             calvingPlot, = plotAx.plot(yr, np.cumsum(-calvingVolFlux), c='tab:green', linestyle=lineStyle)
@@ -431,5 +390,5 @@ axs[1,1].legend([GLfluxPlot, faceMeltPlot, sfcMassBalPlot,  basalMassBalPlot, ca
                ['GL flux', 'undercutting', 'SMB', 'BMB', 'calving', 'total'], loc='upper center', bbox_to_anchor=(0.5, -0.25),
                fancybox=True, shadow=True, ncol=3)
 
-#fig.savefig('plot_budgets', dpi=400, bbox_inches='tight')
+#fig.savefig('plot_budgets.pdf', format='pdf', bbox_inches='tight')
 plt.show()
