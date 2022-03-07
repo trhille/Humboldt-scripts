@@ -14,7 +14,7 @@ import matplotlib.pyplot as plt
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 from optparse import OptionParser
 import time
-
+from os.path import exists
 
 print("** Gathering information.  (Invoke with --help for more details. All arguments are optional)")
 parser = OptionParser(description=__doc__)
@@ -33,6 +33,7 @@ nCols = 3 #nFiles
 fig, axs = plt.subplots(nrows=nRows, ncols=nCols, sharex=True, sharey='row')
 fig.set_size_inches(15, 12)
 insetAxs = []
+budgFig, budgAx = plt.subplots(1,1)
 for ii,ax in enumerate(axs.ravel()):
     if ii <= 2: insetLoc = 3; insetWidth="40%"; insetHeight="45%"
     else: insetLoc = 2; insetWidth="40%"; insetHeight="35%"
@@ -73,11 +74,12 @@ def flood_fill(seedMask, growMask):
 
 for ii, filename in enumerate(filenames):
     print(filename)
+    globalBudget = {}
     if 'massBudgets' not in filename:
         f = Dataset(filename, 'r+')
         f.set_auto_mask(False)
         print('Calculating mass budgets from {}'.format(filename))
-        
+
         # Get mesh variables
         nCells = f.dimensions["nCells"].size
         xCell = f.variables['xCell'][:]
@@ -159,6 +161,9 @@ for ii, filename in enumerate(filenames):
         toc = time.time()
         print('Finished adding {} subglacial lake cells to grounded mask in {} s'.format(np.sum(SGLmask), toc - tic))
 
+        # Check for any shared mask elements
+        print('Found {} cells shared between the floating and grounded masks'.format(np.sum(np.logical_and(floatMask,groundedMask))))
+
         # These masks will be missing some cells because calving might remove a
         # cell in the middle of a timestep, for instance. The best we can do is
         # add this to the nearest mask.
@@ -195,15 +200,27 @@ for ii, filename in enumerate(filenames):
         masks = [groundedMask, floatMask]
 
         # write out masks for debugging
-        # f.variables['groundedMask'][:] = groundedMask
-        # f.variables['floatMask'][:] = floatMask
-        # f.variables['SGLmask'][:] = SGLmask
+        if exists(filename + '_masks'):
+            masksOut = Dataset(filename + '_masks', 'r+')
+        else:
+            print('Masks output file does not exist.'
+                  ' Writing to new file {}_masks.nc'.format(filename))
+            masksOut = Dataset(filename + '_masks', 'w')
+            masksOut.createDimension('nCells', nCells)
+            masksOut.createDimension('Time', None)
+            masksOut.createVariable('groundedMask', 'i', ('Time', 'nCells'))
+            masksOut.createVariable('floatMask', 'i', ('Time', 'nCells'))
+            masksOut.createVariable('SGLmask', 'i', ('Time', 'nCells'))
+        masksOut.variables['groundedMask'][:] = groundedMask
+        masksOut.variables['floatMask'][:] = floatMask
+        masksOut.variables['SGLmask'][:] = SGLmask
+
         f.close()
+        masksOut.close
     else:
         groundedMask ='groundedMask'
         floatMask = 'floatMask'
         masks = [groundedMask, floatMask]
-   
     # Define columns by climate forcing
     if 'MIROC5' in filename:
         col = 0
@@ -232,7 +249,6 @@ for ii, filename in enumerate(filenames):
         #calculate mass budgets if using output_all_timesteps.nc
         if 'massBudgets' not in filename:
             cellAreaArray = np.tile(areaCell, (np.shape(calvingThickness)[0],1))
-
             totalVol = np.sum(thk * mask * cellAreaArray, axis=1)
             calvingVolFlux = np.sum(calvingThickness * mask * cellAreaArray,axis=1) #m^3
             faceMeltVolFlux = np.sum(faceMeltingThickness * cellAreaArray,axis=1) # m^3
@@ -245,6 +261,12 @@ for ii, filename in enumerate(filenames):
             badBasalMassBalInd = np.where( np.abs(basalMassBal) > thk * 910. / deltatArray )
             basalMassBal[badBasalMassBalInd] = (thk * 910. / deltatArray)[badBasalMassBalInd]
             basalMassBalVolFlux = np.sum(basalMassBal * mask * cellAreaArray, axis=1) / 910. * deltat
+
+#            GLvolFlux = ( totalVol-totalVol[0] -
+#                          np.cumsum(basalMassBalVolFlux) -
+#                          np.cumsum(sfcMassBalVolFlux) -
+#                          np.cumsum(-calvingVolFlux) -
+#                          np.cumsum(-faceMeltVolFlux) )
 
             if mask is groundedMask:
                 title = 'Grounded Ice'
@@ -261,6 +283,7 @@ for ii, filename in enumerate(filenames):
                               np.cumsum(basalMassBalVolFlux) -
                               np.cumsum(sfcMassBalVolFlux) -
                               np.cumsum(-calvingVolFlux) )
+                faceMeltVolFlux *= 0.
 
             #Now save these timeseries so we don't have to calculate them from the output files every time
             outfile = filename.replace('output_all_timesteps', 'massBudgets_'+maskName)
@@ -291,7 +314,10 @@ for ii, filename in enumerate(filenames):
             elif mask is floatMask:
                 title = 'floating Ice'
 
-            f = Dataset(filename + '_' + mask + '.nc', 'r')
+            try:
+                f = Dataset(filename + '_' + mask + '_with_initial_solve.nc.cleaned', 'r')
+            except:
+                f = Dataset(filename + '_' + mask + '_with_initial_solve.nc', 'r')
             f.set_auto_mask(False)
             yr = f.variables['daysSinceStart'][:] / 365. + startYear
             GLvolFlux = f.variables['GLvolFlux'][:] / 1.e12
@@ -300,27 +326,45 @@ for ii, filename in enumerate(filenames):
             faceMeltVolFlux = f.variables['faceMeltVolFlux'][:] /1.e12
             calvingVolFlux = f.variables['calvingVolFlux'][:] / 1.e12
             totalVol = f.variables['totalVol'][:] / 1.e12
+
             f.close()
 
-        # for validation
-        ff = Dataset('output_all_timesteps_with_initial_solve.nc.cleaned')
-        deltat = ff.variables['deltat'][:]
-        dvEdge = ff.variables['dvEdge'][:]
-        areaCell = ff.variables['areaCell'][:]
-        cellAreaArray = np.tile(areaCell, (ff.dimensions['Time'].size,1))
-        gg = Dataset('masks_with_initial_solve.nc')
-        flux_array=gg.variables['myGLF2d'][:]
-        grToFlt = gg.variables['gTOf'][:]
-        g2f = (grToFlt * cellAreaArray).sum(axis=1) # m3
-        # Calculate scalar GLF values
-        myGLF = np.zeros(deltat.shape)
-        for t in range(1,len(deltat)):
-            myGLF[t] = (flux_array[t,:]*dvEdge).sum() #units of m3/s
-        myGLF /= 1.e12
-        g2f /= 1.e12
+        # Check global mass budget
+        if mask is groundedMask:
+            maskName = 'groundedMask'
+        elif mask is floatMask:
+            maskName = 'floatMask'
 
-        ff.close()
-        gg.close()
+        globalBudget[maskName] = np.cumsum(sfcMassBalVolFlux + basalMassBalVolFlux - faceMeltVolFlux - calvingVolFlux)
+        globalBudget[maskName + 'TotalVol'] = totalVol
+#        # for validation
+#        if 'massBudgets' in filename:
+#            try:
+#                ff = Dataset(filename.replace('massBudgets', 'output_all_timesteps_with_initial_solve.nc.cleaned'))
+#                gg = Dataset(filename.replace('massBudgets', 'masks_with_initial_solve.nc.cleaned'))
+#            except:
+#                ff = Dataset(filename.replace('massBudgets', 'output_all_timesteps_with_initial_solve.nc'))
+#                gg = Dataset(filename.replace('massBudgets', 'masks_with_initial_solve.nc'))
+#        else:
+#            ff = Dataset(filename, 'r')
+#            gg = Dataset(filename.replace('output_all_timesteps_with_initial_solve', 'masks_with_initial_solve'))
+#
+#        deltat = ff.variables['deltat'][:]
+#        dvEdge = ff.variables['dvEdge'][:]
+#        areaCell = ff.variables['areaCell'][:]
+#        cellAreaArray = np.tile(areaCell, (ff.dimensions['Time'].size,1))
+#        flux_array=gg.variables['myGLF2d'][:]
+#        grToFlt = gg.variables['gTOf'][:]
+#        g2f = (grToFlt * cellAreaArray).sum(axis=1) # m3
+#        # Calculate scalar GLF values
+#        myGLF = np.zeros(deltat.shape)
+#        for t in range(1,len(deltat)):
+#            myGLF[t] = (flux_array[t,:]*dvEdge).sum() #units of m3/s
+#        myGLF /= 1.e12
+#        g2f /= 1.e12
+#
+#        ff.close()
+#        gg.close()
         #Now plot the budgets!
         for plotAx in [inset, ax]:
             if mask is groundedMask:
@@ -328,25 +372,26 @@ for ii, filename in enumerate(filenames):
                 # in globalStats.nc is not what we want here.
 
                 GLfluxPlot, = plotAx.plot(yr, GLvolFlux, c='tab:orange', linestyle=lineStyle)  # uncomment for comparison with globalStats
-                myGLFplot, = plotAx.plot(yr, (-np.cumsum(myGLF * deltat)-np.cumsum(g2f)), 'b--', label='myGLF+G2F')
+#                myGLFplot, = plotAx.plot(yr, (-np.cumsum(myGLF * deltat)-np.cumsum(g2f)), 'b--', label='myGLF+G2F')
                 faceMeltPlot, = plotAx.plot(yr, np.cumsum(-faceMeltVolFlux), c='tab:purple', linestyle=lineStyle)
+                axs[row+1,col].plot(yr, -GLvolFlux, c='magenta', linestyle='dotted')
                 if plotAx is inset:
                     inset.set_ylim(top=0.075, bottom=-.25)
-                else:
-                    fig2,ax2 = plt.subplots(1,1)
-                    ax2.plot(yr, np.abs((GLvolFlux - (-np.cumsum(myGLF * deltat)-np.cumsum(g2f)))))
-                                         #/ (-np.cumsum(myGLF * deltat)-np.cumsum(g2f))), c='r')
-                    ax2.set_yscale('log')
+#                else:
+#                    fig2,ax2 = plt.subplots(1,1)
+#                    ax2.plot(yr, np.abs((GLvolFlux - (-np.cumsum(myGLF * deltat)-np.cumsum(g2f)))))
+#                                         / (-np.cumsum(myGLF * deltat)-np.cumsum(g2f))), c='r')
+#                    ax2.set_yscale('log')
             elif mask is floatMask:
                 GLfluxPlot, = plotAx.plot(yr, GLvolFlux, c='tab:orange', linestyle=lineStyle)
-                myGLFplot, = plotAx.plot(yr, -(-np.cumsum(myGLF * deltat)-np.cumsum(g2f)), 'b--', label='myGLF+G2F')
+#                myGLFplot, = plotAx.plot(yr, -(-np.cumsum(myGLF * deltat)-np.cumsum(g2f)), 'b--', label='myGLF+G2F')
+                axs[row-1,col].plot(yr, -GLvolFlux, c='magenta', linestyle='dotted')
                 if plotAx is inset:
-                    inset.set_ylim(top=.07, bottom=-.03)
-                else:
-                    ax2.plot(yr, np.abs((GLvolFlux - -(-np.cumsum(myGLF * deltat)-np.cumsum(g2f)))
-                                        / -(-np.cumsum(myGLF * deltat)-np.cumsum(g2f))), 'b--')
-                    ax2.set_yscale('log')
-
+                    inset.set_ylim(top=.085, bottom=-.055)
+#                else:
+#                    ax2.plot(yr, np.abs((GLvolFlux - -(-np.cumsum(myGLF * deltat)-np.cumsum(g2f)))
+#                                        / -(-np.cumsum(myGLF * deltat)-np.cumsum(g2f))), 'b--')
+#                    ax2.set_yscale('log')
             basalMassBalPlot, = plotAx.plot(yr, np.cumsum(basalMassBalVolFlux), c='tab:cyan', linestyle=lineStyle)
             sfcMassBalPlot, = plotAx.plot(yr, np.cumsum(sfcMassBalVolFlux), c='tab:pink', linestyle=lineStyle)
             calvingPlot, = plotAx.plot(yr, np.cumsum(-calvingVolFlux), c='tab:green', linestyle=lineStyle)
@@ -365,9 +410,21 @@ for ii, filename in enumerate(filenames):
         inset.set_xticks([2007, 2017])
         inset.set_xticklabels(["'07", "'17"], ha='left', rotation=0)
 
+    # Check global budget:
+    globalBudget_percent_imbalance = ( (globalBudget['groundedMask'] + globalBudget['floatMask'] -
+                                        globalBudget['groundedMaskTotalVol'] - globalBudget['floatMaskTotalVol'] +
+                                        globalBudget['groundedMaskTotalVol'][0] + globalBudget['floatMaskTotalVol'][0]) /
+                                       (globalBudget['groundedMaskTotalVol'] + globalBudget['floatMaskTotalVol'] -
+                                        globalBudget['groundedMaskTotalVol'][0] - globalBudget['floatMaskTotalVol'][0]) )
+
+    budgAx.set_title('global mass budget')
+    budgAx.set_ylabel('Fractional imbalance')
+    budgAx.plot(yr[1::], globalBudget_percent_imbalance[1::])
+
+
+
 for ax in axs[1,:]:
     ax.set_xlabel('Year')
-    
 axs[0,0].set_ylabel('Total grounded volume\nchange ($10^{12}$ m$^3$)')
 axs[1,0].set_ylabel('Total floating volume\nchange ($10^{12}$ m$^3$)')
 axs[1,1].legend([GLfluxPlot, faceMeltPlot, sfcMassBalPlot,  basalMassBalPlot, calvingPlot, totalVolChangePlot],
