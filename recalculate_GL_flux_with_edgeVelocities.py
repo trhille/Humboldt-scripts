@@ -24,18 +24,18 @@ runDir = options.runDir
 doCalc = eval(options.doCalc)
 
 try:
-    f = Dataset(runDir + '/output_all_timesteps.nc.cleaned', 'r')
+    f = Dataset(runDir + '/output_all_timesteps_with_initial_solve.nc.cleaned', 'r')
 except:
-    f = Dataset(runDir + '/output_all_timesteps.nc', 'r')
+    f = Dataset(runDir + '/output_all_timesteps_with_initial_solve.nc', 'r')
 
 # We will write out newly calculated fields to a separate netCDF file.
 # There are two reasons for this: first, to avoid inadvertently corrupting
 # or clobbering the hard-won output file; second, because the output files
 # are often so large that it is prohibitively slow to write to them.
-if exists(runDir + '/masks.nc'):
-    g = Dataset(runDir + '/masks.nc', mode='r+')
+if exists(runDir + '/masks_no_lakes_in_GL_flux.nc'):
+    g = Dataset(runDir + '/masks_no_lakes_in_GL_flux.nc', mode='r+')
 else:
-    g = Dataset(runDir + '/masks.nc', mode='w')
+    g = Dataset(runDir + '/masks_no_lakes_in_GL_flux.nc', mode='w')
 
 f.set_auto_mask(False)
 g.set_auto_mask(False)
@@ -165,6 +165,11 @@ if doCalc:
    #cellMask_grounded += subglacialLakeMask  # add them to grounded ice mask
    #cellMask_floating -= subglacialLakeMask  # and remove them from floating ice mask
    cellMask_floating = floodFillMask
+   # Subglacial lakes are now any ice that is neither grounded nor floating
+   SGLmask = np.logical_and(np.logical_and(np.logical_not(cellMask_floating),
+                                        np.logical_not(cellMask_grounded)),
+                                        cellMask_ice)
+   # Now we add those lakes to grounded ice
    cellMask_grounded = np.logical_and(np.logical_not(floodFillMask), cellMask_ice)
    toc = time.time()
    #print('Finished adding {} subglacial lake cells to grounded mask in {} s'.format(np.sum(subglacialLakeMask), toc - tic))
@@ -263,6 +268,11 @@ if not 'myGLF2d' in g.variables:
                     GLFsign=1.0 # will yield positive flux for velocity from grounded to floating
                 else:
                     GLFsign=-1.0
+
+                # Remove subglacial lakes from this calculation
+                if (SGLmask[maskTime,c1] == 1) or (SGLmask[maskTime,c2] == 1):
+                    GLFsign=0.0
+
                 flux_array[t,e] = (lnv[e,:]*lt[e,:]).sum() * GLFsign
     toc = time.time()
     print('Finished GLF calc in {:0.2f} s'.format(toc - tic))
@@ -362,7 +372,8 @@ print('RMSE between residual and myGLF +G2F: {:0.2f}'.format(RMSE))
 #plt.ylabel('floating vol')
 #axs[2].plot(GLyr + 2007., (thk * cellMask_grounded * cellAreaArray).sum(axis=1), '-r')
 #plt.ylabel('grounded vol')
-
+g.createVariable('GLflux_as_residual', 'f', ('Time',))
+g.variables['GLflux_as_residual'][:] = GLflux_as_residual
 f.close()
 g.close()
 #fig.savefig(runDir.replace('/','_'), dpi=400, bbox_inches='tight')
