@@ -33,7 +33,7 @@ nCols = 3 #nFiles
 fig, axs = plt.subplots(nrows=nRows, ncols=nCols, sharex=True, sharey='row')
 fig.set_size_inches(8, 6)
 insetAxs = []
-budgFig, budgAx = plt.subplots(1,1)
+
 for ii,ax in enumerate(axs.ravel()):
     if ii <= 2: insetLoc = 3; insetWidth="40%"; insetHeight="45%"
     else: insetLoc = 2; insetWidth="40%"; insetHeight="35%"
@@ -305,23 +305,20 @@ for ii, filename in enumerate(filenames):
 
         else: #load budgets
 
-            if mask is groundedMask:
-                title = 'grounded Ice'
-            elif mask is floatMask:
-                title = 'floating Ice'
+            f = Dataset(filename, 'r')
 
-            try:
-                f = Dataset(filename + '_' + mask + '_with_initial_solve.nc.cleaned', 'r')
-            except:
-                f = Dataset(filename + '_' + mask + '_with_initial_solve.nc', 'r')
             f.set_auto_mask(False)
             yr = f.variables['daysSinceStart'][:] / 365. + startYear
             GLvolFlux = f.variables['GLvolFlux'][:] / 1.e12
-            sfcMassBalVolFlux = f.variables['sfcMassBalVolFlux'][:] / 1.e12
-            basalMassBalVolFlux = f.variables['basalMassBalVolFlux'][:] / 1.e12
-            faceMeltVolFlux = f.variables['faceMeltVolFlux'][:] /1.e12
-            calvingVolFlux = f.variables['calvingVolFlux'][:] / 1.e12
-            totalVol = f.variables['totalVol'][:] / 1.e12
+            sfcMassBalVolFluxGrounded = f.variables['sfcMassBalVolFluxGrounded'][:] / 1.e12
+            sfcMassBalVolFluxFloating = f.variables['sfcMassBalVolFluxFloating'][:] / 1.e12
+            basalMassBalVolFluxGrounded = f.variables['basalMassBalVolFluxGrounded'][:] / 1.e12
+            basalMassBalVolFluxFloating = f.variables['basalMassBalVolFluxFloating'][:] / 1.e12
+            faceMeltVolFluxGrounded = f.variables['faceMeltVolFluxGrounded'][:] /1.e12  # This only applies to grounded
+            calvingVolFluxGrounded = f.variables['calvingVolFluxGrounded'][:] / 1.e12
+            calvingVolFluxFloating = f.variables['calvingVolFluxFloating'][:] / 1.e12
+            totalVolGrounded = f.variables['totalVolGrounded'][:] / 1.e12
+            totalVolFloating = f.variables['totalVolFloating'][:] / 1.e12
 
             f.close()
 
@@ -331,30 +328,27 @@ for ii, filename in enumerate(filenames):
         elif mask is floatMask:
             maskName = 'floatMask'
 
-        globalBudget[maskName] = np.cumsum(sfcMassBalVolFlux + basalMassBalVolFlux - faceMeltVolFlux - calvingVolFlux)
-        globalBudget[maskName + 'TotalVol'] = totalVol
-
         #Now plot the budgets!
         for plotAx in [inset, ax]:
             if mask is groundedMask:
-                GLfluxPlot, = plotAx.plot(yr, GLvolFlux, c='tab:orange', linestyle=lineStyle)
-                faceMeltPlot, = plotAx.plot(yr, np.cumsum(-faceMeltVolFlux), c='tab:purple', linestyle=lineStyle)
-                # Uncomment line below to plot grounding line flux calculated from
-                # grounded ice mask on the floating mass budget axes, for comparison
-                #axs[row+1,col].plot(yr, -GLvolFlux, c='magenta', linestyle='dotted')
+                GLfluxGroundedPlot, = plotAx.plot(yr, GLvolFlux, c='tab:orange', linestyle=lineStyle)
+                faceMeltGroundedPlot, = plotAx.plot(yr, np.cumsum(-faceMeltVolFluxGrounded), c='tab:purple', linestyle=lineStyle)
+                basalMassBalGroundedPlot, = plotAx.plot(yr, np.cumsum(basalMassBalVolFluxGrounded), c='tab:cyan', linestyle=lineStyle)
+                sfcMassBalGroundedPlot, = plotAx.plot(yr, np.cumsum(sfcMassBalVolFluxGrounded), c='tab:pink', linestyle=lineStyle)
+                calvingGroundedPlot, = plotAx.plot(yr, np.cumsum(-calvingVolFluxGrounded), c='tab:green', linestyle=lineStyle)
+                totalVolChangeGroundedPlot, = plotAx.plot(yr, totalVolGrounded - totalVolGrounded[0], c='black', linestyle=lineStyle);
+
                 if plotAx is inset:
                     inset.set_ylim(top=0.075, bottom=-.25)
             elif mask is floatMask:
-                GLfluxPlot, = plotAx.plot(yr, GLvolFlux, c='tab:orange', linestyle=lineStyle)
-                # Uncomment line below to plot grounding line flux calculated from
-                # floating ice mask on the grounded mass budget axes, for comparison
-                #axs[row-1,col].plot(yr, -GLvolFlux, c='magenta', linestyle='dotted')
+                GLfluxFloatingPlot, = plotAx.plot(yr, -GLvolFlux, c='tab:orange', linestyle=lineStyle)
+                basalMassBalFloatingPlot, = plotAx.plot(yr, np.cumsum(basalMassBalVolFluxFloating), c='tab:cyan', linestyle=lineStyle)
+                sfcMassBalFloatingPlot, = plotAx.plot(yr, np.cumsum(sfcMassBalVolFluxFloating), c='tab:pink', linestyle=lineStyle)
+                calvingFloatingPlot, = plotAx.plot(yr, np.cumsum(-calvingVolFluxFloating), c='tab:green', linestyle=lineStyle)
+                totalVolChangeFloatingPlot, = plotAx.plot(yr, totalVolFloating - totalVolFloating[0], c='black', linestyle=lineStyle); 
                 if plotAx is inset:
                     inset.set_ylim(top=.085, bottom=-.055)
-            basalMassBalPlot, = plotAx.plot(yr, np.cumsum(basalMassBalVolFlux), c='tab:cyan', linestyle=lineStyle)
-            sfcMassBalPlot, = plotAx.plot(yr, np.cumsum(sfcMassBalVolFlux), c='tab:pink', linestyle=lineStyle)
-            calvingPlot, = plotAx.plot(yr, np.cumsum(-calvingVolFlux), c='tab:green', linestyle=lineStyle)
-            totalVolChangePlot, = plotAx.plot(yr, totalVol - totalVol[0], c='black', linestyle=lineStyle); 
+
         ax.grid('on')
         if row==0:
             ax.set_title(colTitle)
@@ -369,26 +363,16 @@ for ii, filename in enumerate(filenames):
         inset.set_xticks([2007, 2017])
         inset.set_xticklabels(["'07", "'17"], ha='left', rotation=0)
 
-    # Check global budget:
-    globalBudget_percent_imbalance = ( (globalBudget['groundedMask'] + globalBudget['floatMask'] -
-                                        globalBudget['groundedMaskTotalVol'] - globalBudget['floatMaskTotalVol'] +
-                                        globalBudget['groundedMaskTotalVol'][0] + globalBudget['floatMaskTotalVol'][0]) /
-                                       (globalBudget['groundedMaskTotalVol'] + globalBudget['floatMaskTotalVol'] -
-                                        globalBudget['groundedMaskTotalVol'][0] - globalBudget['floatMaskTotalVol'][0]) )
-
-    budgAx.set_title('global mass budget')
-    budgAx.set_ylabel('Fractional imbalance')
-    budgAx.plot(yr[1::], globalBudget_percent_imbalance[1::])
-
-
 
 for ax in axs[1,:]:
     ax.set_xlabel('Year')
 axs[0,0].set_ylabel('Total grounded volume\nchange ($10^{12}$ m$^3$)')
 axs[1,0].set_ylabel('Total floating volume\nchange ($10^{12}$ m$^3$)')
-axs[1,1].legend([GLfluxPlot, faceMeltPlot, sfcMassBalPlot,  basalMassBalPlot, calvingPlot, totalVolChangePlot],
-               ['GL flux', 'undercutting', 'SMB', 'BMB', 'calving', 'total'], loc='upper center', bbox_to_anchor=(0.5, -0.25),
-               fancybox=True, shadow=True, ncol=3)
+axs[1,1].legend([GLfluxGroundedPlot, faceMeltGroundedPlot, sfcMassBalGroundedPlot,
+                 basalMassBalGroundedPlot, calvingGroundedPlot, totalVolChangeGroundedPlot],
+                ['GL flux', 'undercutting', 'SMB', 'BMB', 'calving', 'total'],
+                loc='upper center', bbox_to_anchor=(0.5, -0.25),
+                fancybox=True, shadow=True, ncol=3)
 
 #fig.savefig('plot_budgets.pdf', format='pdf', bbox_inches='tight')
 plt.show()
