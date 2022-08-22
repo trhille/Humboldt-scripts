@@ -32,6 +32,7 @@ for runFile in runFilesList:
 nFiles = len(runFilesList)
 obs = Dataset(args.observationsFile, 'r')
 obsSpeed = obs.variables['surfaceSpeed'][0,:]*scyr
+obsSpeedMax = np.nanmax(obsSpeed)
 obsMask = (obsSpeed > 0.0)
 areaCell = obs.variables["areaCell"][:]
 nEdges = obs.dimensions["nEdges"].size
@@ -67,8 +68,8 @@ runFileCount = 0
 scores = {} #empty dictionary to fill with scores for each run
 
 #define speed bands
-speedBandsLower = [0., 300., 600.]
-speedBandsUpper = [300., 600., 1.e6]
+speedBandsLower = [0., 300., 600., 0.]
+speedBandsUpper = [300., 600., round(obsSpeedMax), round(obsSpeedMax)]
 nBands = len(speedBandsLower)
 marginScores = [] #fill with RMSdistanceToObsMargin below
 
@@ -140,7 +141,7 @@ for band in np.arange(0, nBands):
     normAx[0].scatter(np.arange(0,nFiles)+band/25, bandScoresNormalized, c=speedColors[band],
                       marker='.', label=(str(speedBandsLower[band]) 
                       + ' - ' + str(speedBandsUpper[band]) + ' m yr$^{-1}$'))
-    speedAx.scatter(np.arange(0,nFiles)+band/25, bandScoresTmp, c=speedColors[band],
+    speedAx.scatter(np.arange(0,nFiles)+band/25, bandScoresTmp / np.mean([speedBandsLower[band], speedBandsUpper[band]]), c=speedColors[band],
                     marker='.', label=(str(speedBandsLower[band])
                     + ' - ' + str(speedBandsUpper[band]) + ' m yr$^{-1}$'))
     bandRankings.append(scipy.stats.rankdata(bandScores[band*nFiles:((band+1) * nFiles)]))
@@ -162,7 +163,7 @@ normAx[0].set_ylabel('Normalized RMS\nvelocity misfit')
 normAx[1].set_xticks(np.arange(0,runFileCount))
 #normAx[0].set_xticks(np.arange(0,runFileCount))
 #normAx[0].set_xticklabels(['1', '1/3', '1/10', '1/20', '1/25', '1/30', '1/40', '1/50'])
-normAx[1].set_xticklabels(['150', '160', '170', '180', '190', '200'])
+#normAx[1].set_xticklabels(['150', '160', '170', '180', '190', '200'])
 #normAx[1].set_xticklabels(runNamesList, rotation=15)  # if you want to label by the file path
 normAx[1].set_ylabel('RMS distance to\nobserved margin (m)')
 #normAx[1].set_ylabel('Max velocity misfit (m yr$^{-1}$)')
@@ -175,10 +176,10 @@ normFig.tight_layout()
 #marginAx[1].set_xticklabels(runNamesList, rotation=15)
 #marginFig.tight_layout()
 speedLeg = speedAx.legend()
-speedLeg.get_texts()[-1].set_text('>' + str(speedBandsLower[-1]) + ' m yr$^{-1}$')
+speedLeg.get_texts()[-1].set_text('All velocities')
 #speedAx.set_xlabel('basal friction law exponent')
 speedAx.set_ylabel('RMS velocity misfit (m yr$^{-1}$)')
-#speedAx.set_xticklabels(['', '1', '1/3', '1/4', '1/5', '1/6', '1/7', '1/8', '1/9', '1/10'])
+speedAx.set_xticklabels(['', '1', '1/3', '1/4', '1/5', '1/6', '1/7', '1/8', '1/9', '1/10'])
 speedFig.set_size_inches(8, 4)
 speedFig.tight_layout()
 #speedFig.savefig('tuneExponent', dpi=300, bbox_inches='tight')
