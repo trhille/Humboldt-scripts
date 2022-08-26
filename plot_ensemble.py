@@ -31,18 +31,14 @@ parser = OptionParser(description=__doc__)
 parser.add_option("-d", dest="ensembleDirs", help="directory containing ensemble members (strings separated by commas; no spaces)", metavar="FILENAME")
 parser.add_option("-b", dest="boundsDirs", help="directory containing ensemble members (strings separated by commas; no spaces)", metavar="FILENAME")
 parser.add_option("-v", dest="variableName", help="variable(s) to plot, separated by commas", default = "volumeAboveFloatation")
-parser.add_option("-c", dest="controlFiles", help="comma-separated paths to control run(s) to subtract from ensemble members", metavar="FILENAME")
+parser.add_option("-c", dest="subtractControl", help="subtract control run values from ensemble members", default = 'False')
 
 parser.add_option("-u", dest="units", help="units for mass/volume: m3, kg, Gt", default="m3")
 options, args = parser.parse_args()
 
 ensembleDirs = options.ensembleDirs.split(',') # split ensemble directories into list
 variableName = options.variableName.split(',')
-if options.controlFiles:
-    controlFiles = options.controlFiles.split(',') # split control files into list
-else:
-    controlFiles = None
-    
+
 if options.boundsDirs:
     boundsDirs = options.boundsDirs.split(',') # split control files into list
 else:
@@ -56,12 +52,7 @@ colormap = mpl.colors.TABLEAU_COLORS
 #colormap = mpl.colors.XKCD_COLORS
 colorlist = list(colormap.items())
 #Get units
-if controlFiles:
-    f = Dataset(controlFiles[0], 'r')
-    units = f.variables[variableName[0]].units
-    f.close()
-else:
-    units = options.units
+units = options.units
 
 #set linestyles to loop through (e.g., to separate out RCP scenarios)
 linestyleList = ['solid', 'dashed', 'dotted', 'dashdot']
@@ -86,7 +77,7 @@ def VAF2seaLevel(vol):
 def seaLevel2VAF(vol):
     return -vol * 3.62e14 * rhosw / rhoi / 1000.
 
-def plotEnsembleBounds(boundsDir, controlFile=None):
+def plotEnsembleBounds(boundsDir):
     boundsFiles = sorted(os.listdir(boundsDir)) # get filenames in directory
     
     for boundsFile in boundsFiles:
@@ -122,13 +113,12 @@ def plotEnsembleBounds(boundsDir, controlFile=None):
     
     return plotBounds, plotBoundNames
 
-def plotEnsemble(ensDir, row, variable, controlFile=None):
+def plotEnsemble(ensDir, row, variable):
 #    print("Reading and plotting file: {}".format(fname))
     colorIndex = 0 #initialize index to loop through color list
     ensembleFiles = sorted(os.listdir(ensDir)) # get filenames in directory
     for ensembleMember in ensembleFiles:
-        if 'globalStats' in ensembleMember:
-            
+        if 'globalStats' in ensembleMember and 'control' not in ensembleMember:           
             f = Dataset(ensDir+ensembleMember,'r')
             yr = f.variables['daysSinceStart'][:]/365.0
             deltat = f.variables['deltat'][:] / 3.154e7 # convert deltat to years
@@ -141,24 +131,27 @@ def plotEnsemble(ensDir, row, variable, controlFile=None):
         
             var2plot = f.variables[variable][:] \
                          #- f.variables[options.variableName][0]
-                         
+
+            # find index for plotting and get control file
+            if 'CNRM' in ensembleMember:
+                col = 2
+                controlFile = [i for i in ensembleFiles if 'control_CNRM' in i][0]
+            elif 'HadGEM2' in ensembleMember:
+                col = 1 
+                controlFile = [i for i in ensembleFiles if 'control_HadGEM2' in i][0]
+            elif 'MIROC5' in ensembleMember:
+                col = 0                     
+                controlFile = [i for i in ensembleFiles if 'control_MIROC5' in i][0]
+
             # subtract off variables from control run
-            if controlFile and variable == 'volumeAboveFloatation':
+            if options.subtractControl == 'True':
                 #interpolate control run onto ensemble member time vector
-                controlData = Dataset(controlFile, 'r')
+                controlData = Dataset(ensDir+controlFile, 'r')
                 controlInterp = np.interp(yr, controlData.variables['daysSinceStart'][:]/365.0, 
                                controlData.variables[variable][:])
 
                 var2plot = var2plot - controlInterp #+ controlInterp[0]
                 
-            # find index for plotting
-            if 'CNRM' in ensembleMember:
-                col = 2
-            elif 'HadGEM2' in ensembleMember:
-                col = 1
-            elif 'MIROC5' in ensembleMember:
-                col = 0
-            
             plotInd = row * nCols + col
             
             plotAx = varAx[plotInd]
@@ -168,7 +161,6 @@ def plotEnsemble(ensDir, row, variable, controlFile=None):
             plotLines.append(tmpLine)
             plotLineNames.append(ensembleMember)
             
-
             colorIndex += 1 # go to next color
             f.close()
             if variable == 'volumeAboveFloatation':
@@ -192,11 +184,9 @@ for directory in ensembleDirs:
         # This makes labeling flexible for one or more rows.
         yLabelInd = row * nCols
         
-        if controlFiles:
-            controlFile=controlFiles[controlIndex]
         if boundsDirs and boundsIndex <= len(boundsDirs)-1:
-            plotEnsembleBounds(boundsDirs[boundsIndex], controlFile)
-        plotLines, plotLineNames = plotEnsemble(directory, row, variable, controlFile)
+            plotEnsembleBounds(boundsDirs[boundsIndex])
+        plotLines, plotLineNames = plotEnsemble(directory, row, variable)
         if variable == "volumeAboveFloatation":
             addSeaLevAx(varAx[(row + 1) * nCols - 1])
         if variable == 'volumeAboveFloatation':            
@@ -206,7 +196,6 @@ for directory in ensembleDirs:
         else:
             varAx[yLabelInd].set_ylabel('Total {} (${}$)'.format(variable, units), fontsize=16)
 
-    controlIndex += 1
     linestyleIndex += 1
     boundsIndex += 1
 
