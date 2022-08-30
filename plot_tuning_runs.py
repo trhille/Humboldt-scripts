@@ -20,6 +20,7 @@ from matplotlib.pyplot import cm
 import matplotlib.tri as tri
 import matplotlib.gridspec as gridspec
 from matplotlib.colorbar import Colorbar
+from matplotlib.colors import TwoSlopeNorm
 
 rhoi = 910.0
 rhosw = 1028.0
@@ -46,19 +47,6 @@ xCell = obs.variables["xCell"][:] / 1000.
 yCell = obs.variables["yCell"][:] / 1000.
 obsSpeed = obs.variables["surfaceSpeed"][:] * 3.154e7  # m/yr
 
-# Hack for asymmetric colorbar, taken from
-# http://chris35wills.github.io/matplotlib_diverging_colorbar/
-# Set the colormap and centre the colorbar
-class MidpointNormalize(mpl.colors.Normalize):
-    """Normalise the colorbar."""
-    def __init__(self, vmin=None, vmax=None, midpoint=None, clip=False):
-        self.midpoint = midpoint
-        mpl.colors.Normalize.__init__(self, vmin, vmax, clip)
-
-    def __call__(self, value, clip=None):
-        x, y = [self.vmin, self.midpoint, self.vmax], [0, 0.5, 1]
-        return np.ma.masked_array(np.interp(value, x, y), np.isnan(value))
-
 # Use rows for q values, columns for climate forcings.
 # Currently this means plotting all time levels on the same
 # axes, which may or may not work, depending on application.
@@ -67,24 +55,32 @@ class MidpointNormalize(mpl.colors.Normalize):
 #                        constrained_layout=True)
 #nRows = 2
 #nCols = len(runs) // nRows + 1  # in case you want to hard-code nRows
-nCols = 4
-nRows = len(runs) // nCols + 1
+nCols = 5
+nRows = len(runs) // nCols
 # Add another row if necessary
-if nRows * (nCols - 1) < len(runs):
-    nRows += 1
-fig = plt.figure(figsize=(3 * nCols + 1, 3 * nRows + 1))
+#if nRows * (nCols) < len(runs)-1:
+#   nRows += 1
+
+figSize = (3 * nCols + 1, 3 * nRows + 1)
+fig, axs_array = plt.subplots(nrows=nRows, ncols=nCols,
+                       sharex=True, sharey=True,
+                       figsize=figSize)
+#                       constrained_layout=True)
+#                       gridspec_kw={'height_ratios': (nRows - 1) * [6] + [1]})
+axs = axs_array.ravel()
+#fig = plt.figure(figsize=(3 * nCols + 1, 3 * nRows + 1))
 # last column is for colorbars
 gs = gridspec.GridSpec(nRows, nCols,
                        height_ratios=[1] * nRows,
-                       width_ratios=[1,1,1,0.1]) 
-axs = []
-for row in np.arange(0, nRows):
-    for col in np.arange(0, nCols-1):
-        axs.append(plt.subplot(gs[row, col]))
-#        axs[-1].sharex(axs[0])
-#        axs[-1].sharey(axs[0])
-cbarAx1 = plt.subplot(gs[0,-1])
-cbarAx2 = plt.subplot(gs[1,-1])
+                       width_ratios=(nCols-1)*[1] + [0.1]) 
+#axs = []
+#for row in np.arange(0, nRows):
+#    for col in np.arange(0, nCols-1):
+#        axs.append(plt.subplot(gs[row, col]))
+##        axs[-1].sharex(axs[0])
+##        axs[-1].sharey(axs[0])
+#cbarAx1 = plt.subplot(gs[0,-1])
+#cbarAx2 = plt.subplot(gs[1,-1])
 
 # Plot bed topo and initial extent on all axes using first file
 bedPlot = []
@@ -109,8 +105,8 @@ bedMax = 780.
 for ii,ax in enumerate(axs):
     if ii < len(runs):
         bedPlot.append(ax.pcolormesh(bedX, bedY, bed, cmap='BrBG',
-                   vmin=bedMin, vmax=bedMax,
-                   norm=MidpointNormalize(bedMin, bedMax, 0.)))
+                       norm=TwoSlopeNorm(
+                       vmin=bedMin, vmax=bedMax, vcenter=0.)))
     else:
         ax.axis("off")
     #initExtentPlot.append(ax.tricontour(xCell, yCell, initialExtentMask[0,:], colors='black'))
@@ -149,37 +145,50 @@ for ii,run in enumerate(runs):
     spdMask1 = spdNan[timeLevPlot, :] >= 100
     spdMask2 = spdNan[timeLevPlot, :] >= 300
     spdMask3 = spdNan[timeLevPlot, :] >= 600
+
+    if ii==0:
+        obsVel = spdNan[timeLevPlot,:]
+        plotField = obsVel
+        cmap='plasma'
+        vmin=0.
+        vmax=1000.
+    else:
+        plotField = spdNan[timeLevPlot,:] - obsVel
+        cmap='RdBu'
+        vmin=-350.
+        vmax=350.
+
     spdPlot.append(axs[ii].tripcolor(xCell, yCell, 
-                   (spdNan[timeLevPlot,:]), cmap='plasma', shading='gouraud',
-                   vmin=(0.), vmax=(1000.)))
+                   plotField, cmap=cmap, shading='gouraud',
+                   vmin=(vmin), vmax=(vmax)))
     for spdMask, obsSpdMask in zip([spdMask1, spdMask2, spdMask3],
                                    [obsSpdMask1, obsSpdMask2, obsSpdMask3]):
         axs[ii].tricontour(xCell, yCell, spdMask,
                            levels=[0.9999], colors='cyan', linewidths=[0.5])
         axs[ii].tricontour(xCell, yCell, obsSpdMask,
-                           levels=[0.9999], colors='white', linewidths=[0.5])
+                           levels=[0.9999], colors='black', linewidths=[0.5])
 
     axs[ii].set_aspect('equal')
 
-        
 # Customize plots
 for ax in axs:
     ax.set_ylim(top=-1020, bottom = -1120) # hard-code limits for now
     ax.set_xlim(left=-425, right=-300)
 
-for ind in [0,3]:
-    axs[ind].set_ylabel('km')
-for ind in [0, 1, 2]:
-    axs[ind].set_xticklabels(['','', '', '', '', ''])
-for ind in [1, 2, 4, 5]:
-    axs[ind].set_yticklabels(['','', '', '', '', ''])
-for ind in [3,4,5]:
-    axs[ind].set_xlabel('km')
+#cbar1 = Colorbar(ax=cbarAx1, mappable=spdPlot[0], orientation='vertical',
+#                 label="Ice speed (m yr$^{-1}$)", extend='both')
+#cbar2 = Colorbar(ax=cbarAx2, mappable=bedPlot[0], orientation='vertical',
+#                 label="Bed elevation (m)")
 
-cbar1 = Colorbar(ax=cbarAx1, mappable=spdPlot[0], orientation='vertical',
-                 label="Ice speed (m yr$^{-1}$)")
-cbar2 = Colorbar(ax=cbarAx2, mappable=bedPlot[0], orientation='vertical',
-                 label="Bed elevation (m)")
+cbar1 = plt.colorbar(ax=axs_array[-1,0], location='bottom',
+                     mappable=spdPlot[0], orientation='horizontal',
+                     label="Observed speed 2017-2018 (m yr$^{-1}$)")
+cbar2 = plt.colorbar(ax=axs_array[-1,2], location='bottom',
+                     mappable=spdPlot[1], orientation='horizontal',
+                     label="Modeled - observed speed (m yr$^{-1}$)", extend='both')
+cbar3 = plt.colorbar(ax=axs_array[-1,-1], mappable=bedPlot[0],
+                     orientation='horizontal', location='bottom',
+                     label="Bed elevation (m)", extend='both')
 
 plt.show()
 #fig.savefig('basalFrictionExpTuning', dpi=400, bbox_inches='tight')
