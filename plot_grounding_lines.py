@@ -17,6 +17,8 @@ from optparse import OptionParser
 import matplotlib.pyplot as plt
 import matplotlib as mpl
 from matplotlib.pyplot import cm
+from matplotlib.colors import TwoSlopeNorm
+
 
 rhoi = 910.0
 rhosw = 1028.0
@@ -42,19 +44,6 @@ initialExtentValue = 1
 dynamicValue = 2
 floatValue = 4
 groundingLineValue = 256
-
-# Hack for asymmetric colorbar, taken from
-# http://chris35wills.github.io/matplotlib_diverging_colorbar/
-# Set the colormap and centre the colorbar
-class MidpointNormalize(mpl.colors.Normalize):
-    """Normalise the colorbar."""
-    def __init__(self, vmin=None, vmax=None, midpoint=None, clip=False):
-        self.midpoint = midpoint
-        mpl.colors.Normalize.__init__(self, vmin, vmax, clip)
-
-    def __call__(self, value, clip=None):
-        x, y = [self.vmin, self.midpoint, self.vmax], [0, 0.5, 1]
-        return np.ma.masked_array(np.interp(value, x, y), np.isnan(value))
 
 # Use rows for q values, columns for climate forcings.
 # Currently this means plotting all time levels on the same
@@ -82,10 +71,12 @@ initialExtentMask = (cellMask & initialExtentValue) // initialExtentValue
 
 bedMin = -420.
 bedMax = 780.
-for ax in axs.ravel(): 
-    bedPlot.append(ax.pcolormesh(bedX, bedY, bed, cmap='BrBG', vmin=bedMin,
-                   vmax=bedMax, norm=MidpointNormalize(bedMin, bedMax, 0.),
-                   rasterized=True))
+for ax in axs.ravel():
+    bedPlot.append(ax.pcolormesh(
+                       bedX, bedY, bed, cmap='BrBG',
+                       norm=TwoSlopeNorm(
+                            vmin=bedMin, vmax=bedMax, vcenter=0.),
+                       rasterized=True))
     initExtentPlot.append(ax.tricontour(xCell, yCell,
                           initialExtentMask[0,:], colors='black'))
 f.close()
