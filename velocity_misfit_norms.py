@@ -127,13 +127,14 @@ for runFile in runFilesList:
 
 # Now loop through runs again and rank scores
 bandScores = []
+bandArea = []
 bandRankings = []
 fileScores = []
 marginRankings = scipy.stats.rankdata(marginScores) 
 for band in np.arange(0, nBands):
     for runFile in runFilesList:
         bandScores.append(scores[runFile]['RMS'][band])
-
+    bandArea.append(np.sum(areaCell * (obsSpeed>speedBandsLower[band]) * (obsSpeed<speedBandsUpper[band])))
 for band in np.arange(0, nBands):
     bandScoresTmp = bandScores[band*nFiles:((band+1) * nFiles)] # just the scores in this band
     bandScoresNormalized = bandScoresTmp / np.max(bandScoresTmp)
@@ -144,6 +145,10 @@ for band in np.arange(0, nBands):
     speedAx.scatter(np.arange(0,nFiles)+band/25, bandScoresTmp / np.mean([speedBandsLower[band], speedBandsUpper[band]]), c=speedColors[band],
                     marker='.', label=(str(speedBandsLower[band])
                     + ' - ' + str(speedBandsUpper[band]) + ' m yr$^{-1}$'))
+    # Uncomment if you want to normalize by band area
+    #speedAx.scatter(np.arange(0,nFiles)+band/25, bandScoresTmp / bandArea[band], c=speedColors[band],
+    #                marker='.', label=(str(speedBandsLower[band])
+    #                + ' - ' + str(speedBandsUpper[band]) + ' m yr$^{-1}$'))
     bandRankings.append(scipy.stats.rankdata(bandScores[band*nFiles:((band+1) * nFiles)]))
 
 for iFile in np.arange(0, nFiles):
