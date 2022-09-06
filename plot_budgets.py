@@ -370,9 +370,9 @@ axs[0,0].set_ylabel('Total grounded volume\nchange ($10^{12}$ m$^3$)')
 axs[1,0].set_ylabel('Total floating volume\nchange ($10^{12}$ m$^3$)')
 axs[1,1].legend([GLfluxGroundedPlot, faceMeltGroundedPlot, sfcMassBalGroundedPlot,
                  basalMassBalGroundedPlot, calvingGroundedPlot, totalVolChangeGroundedPlot],
-                ['GL flux', 'undercutting', 'SMB', 'BMB', 'calving', 'total'],
+                ['GL flux', 'undercutting', 'surface mass balance', 'basal mass balance', 'calving', 'total'],
                 loc='upper center', bbox_to_anchor=(0.5, -0.25),
                 fancybox=True, shadow=True, ncol=3)
 
-#fig.savefig('plot_budgets.pdf', format='pdf', bbox_inches='tight')
+fig.savefig('plot_budgets.pdf', format='pdf', bbox_inches='tight')
 plt.show()
