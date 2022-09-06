@@ -144,7 +144,7 @@ def plotEnsemble(ensDir, row, variable):
                 controlFile = [i for i in ensembleFiles if 'control_MIROC5' in i][0]
 
             # subtract off variables from control run
-            if options.subtractControl == 'True':
+            if options.subtractControl == 'True' and variable == 'volumeAboveFloatation':
                 #interpolate control run onto ensemble member time vector
                 controlData = Dataset(ensDir+controlFile, 'r')
                 controlInterp = np.interp(yr, controlData.variables['daysSinceStart'][:]/365.0, 
@@ -281,7 +281,7 @@ for bound, boundName in zip(plotBounds, plotBoundNames):
         #bound.set_hatch('xxxxxx')
         bound.set_alpha(0.6)
         
-varFig.set_size_inches(15, 7 * len(variableName))
+varFig.set_size_inches(15, 5 * len(variableName))
 varFig.subplots_adjust(wspace=0.15, hspace=0.1)
 
 plt.show()
