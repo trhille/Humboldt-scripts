@@ -38,9 +38,9 @@ else:
     speed = dataset.variables["surfaceSpeed"][:] * ( dataset.variables["cellMask"][:] & 2 )//2 * 3600. * 24. * 365.
     
 bedTopo = dataset.variables["bedTopography"][0,:]
-startYear = 2000
+startYear = 2007
 time = dataset.variables["daysSinceStart"][:] / 365. + startYear
-time=time[0:30]
+time=time[0:11]
 thk = thk*(thk<5e3)
 
 coords = []
@@ -55,8 +55,8 @@ with open(options.coords_file, newline='') as csvfile:
          x.append(float(row[0]))
          y.append(float(row[1]))
 
-xArray = np.array(x) * 1000.0
-yArray= np.array(y) * 1000.0
+xArray = np.array(x)
+yArray= np.array(y)
 
 d_distance = np.zeros(len(xArray))
 for ii in np.arange(1, len(xArray)):
@@ -95,6 +95,7 @@ thickAx.plot( (distance[-1]-distance)/1000., bed_transect, color='black')
 speedAx.set_xlabel('Distance (km)')
 speedAx.set_ylabel('Surface\nspeed (m/yr)')
 speedAx.set_xlim((0,35))
+speedAx.set_ylim((0, 1000))
 thickAx.set_ylabel('Elevation\n(m asl)')
 thickAx.set_xlim((0,35))
 transectFig.subplots_adjust(hspace=0.4)
