@@ -7,11 +7,13 @@ This script is for tuning the gamma0 parameter for the ISMIP6 ice shelf melt par
 """
 from netCDF4 import Dataset
 import numpy as np
+import matplotlib.pyplot as plt
 
-forcingFile = '/Users/trevorhillebrand/Documents/mpas/MALI_output/Humboldt_1to10km/Humboldt_only_mesh/Humboldt_only_1to10km_MIROC5-rcp85_3dOceanThermalForcing.nc'
-meshFile = '/Users/trevorhillebrand/Documents/mpas/MALI_output/Humboldt_1to10km/Humboldt_only_mesh/Humboldt_1to10km_r04_20210615.nc'
 
-desiredMeltRate = 30. #m/yr
+forcingFile = '/global/cscratch1/sd/trhille/Thwaites_1to8km_r02_20220427/forcings/ocean_thermal_forcing/obs/processed_obs_TF_1995-2017_8km_x_60m.nc'
+meshFile = '/global/cfs/cdirs/piscees/MALI_input_files/Thwaites_1to8km_r02/Thwaites_1to8km_r02_20220427.nc'
+
+desiredMeanMeltRate = 27. #m/yr
 #get necessary initial condition fields
 mesh = Dataset(meshFile, 'r')
 mesh.set_auto_mask(False)
@@ -26,9 +28,10 @@ f = Dataset(forcingFile, 'r')
 f.set_auto_mask(False)
 layerTF = f.variables["ismip6shelfMelt_3dThermalForcing"][:]
 zOcean = f.variables["ismip6shelfMelt_zOcean"][:]
-timeLevStart = 57
-timeLevEnd = 68
-layerTFmean = np.mean(layerTF[timeLevStart:timeLevEnd, :, :], axis=0)
+timeLevStart = 0
+timeLevEnd = 1
+#layerTFmean = np.mean(layerTF[timeLevStart:timeLevEnd, :, :], axis=0)
+layerTFmean = np.mean(layerTF[:, :, :], axis=0)
 Time = f.dimensions["Time"].size
 
 #constants
@@ -43,16 +46,15 @@ cste = (rhosw*cp_seawater/(rhoi*latent_heat_ice))**2.
 #get lowerSurface from thickness, bedTopography, and floatation thickness
 hFloat = -bed * rhosw / rhoi #flotation thickness
 hFloat[bed>=0.] = 0.0
-floatMask = ( (thk <= hFloat) & (thk > 0.0) )[0,:]
+floatMask = np.logical_and( (thk <= hFloat), (thk > 0.0) )[0,:]
 
-lowerSurface = bed * 0.0
-lowerSurface[0, (1 - floatMask)] = bed[0, (1 - floatMask)]
+lowerSurface = bed.copy()
 lowerSurface[0, floatMask] = -rhoi / rhosw * thk[0, floatMask]
 
 TFdraft = np.zeros(shape=(1, nCells))
 
 for iCell in np.arange(0, nCells):
-    TFdraft[0, iCell] = np.interp(bed[0, iCell], np.flip(zOcean), np.flip(layerTFmean[iCell,:])) #use TF at base of floating ice
+    TFdraft[0, iCell] = np.interp(lowerSurface[0, iCell], np.flip(zOcean), np.flip(layerTFmean[iCell,:])) #use TF at base of floating ice
     #TFdraft[0, iCell] = layerTFmean[iCell,2] #use TF at base of thermocline
     
 # Mean thermal forcing at base of floating ice
@@ -62,11 +64,8 @@ meanTF = np.sum(TFdraft[0,floatMask] * areaCell[floatMask]) / np.sum(areaCell[fl
 # floatingBasalMassBal = ( -1.0 * gamma0 * cste / scyr * rhoi *
 #                        TFdraft * np.abs(meanTF) )
 
-desiredBMB = -desiredMeltRate * rhoi / scyr # kg / m^2 / s
-
-gamma0 = -scyr * desiredBMB / (cste * rhoi * TFdraft[0,floatMask] * meanTF)
-gamma0mean = np.mean(gamma0)
-
+gamma0 = ( np.sum(desiredMeltRate * areaCell[floatMask]) / 
+         np.sum(TFdraft[0,floatMask] * areaCell[floatMask]) ) / (cste * meanTF)
 
 print("For desired melt rate of {} m/yr at base of floating ice, mean gamma0 = {}".
-      format(desiredMeltRate,gamma0mean))
+      format(desiredMeltRate,gamma0))
