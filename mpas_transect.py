@@ -17,6 +17,7 @@ from matplotlib.pyplot import cm
 parser = OptionParser(description='Plot transect from MPAS netCDF')
 parser.add_option("-d", "--data", dest="data_file", help="the MPAS netCDF file")
 parser.add_option("-c", "--coords", dest="coords_file", help="csv file defining transect")
+parser.add_option("--temperature", dest="interp_temp", action="store_true", help="interpolate temperature")
 for option in parser.option_list:
     if option.default != ("NO", "DEFAULT"):
         option.help += (" " if option.help else "") + "[default: %default]"
@@ -26,22 +27,31 @@ dataset = Dataset(options.data_file, 'r')
 dataset.set_always_mask(False)
 xCell = dataset.variables["xCell"][:]
 yCell = dataset.variables["yCell"][:]
+nCells = dataset.dimensions['nCells'].size
 areaCell = dataset.variables["areaCell"][:]
-# only take thickness and speed of dynamic ice
-if "cellMask_dynamicIce" in dataset.variables.keys():
-    thk = dataset.variables["thickness"][:] * dataset.variables["cellMask_dynamicIce"][:]
-    speed = dataset.variables["surfaceSpeed"][:] * dataset.variables["cellMask_dynamicIce"][:] * 3600. * 24. * 365.
+layerThicknessFractions = dataset.variables["layerThicknessFractions"][:]
+nVertLevels = dataset.dimensions['nVertLevels'].size
+
+li_mask_ValueDynamicIce = 2
+cellMask = dataset.variables['cellMask'][:]
+cellMask_dynamicIce = (cellMask & li_mask_ValueDynamicIce) // li_mask_ValueDynamicIce
+# only take thickness, speed, and temperature of dynamic ice
+thk = dataset.variables["thickness"][:] * cellMask_dynamicIce
+if "surfaceSpeed" in dataset.variables.keys():
+    speed = dataset.variables["surfaceSpeed"][:] * cellMask_dynamicIce * 3600. * 24. * 365.
 else:
-    print('Variable cellMask_dynamicIce was not found. Speed interpolation may be incorrect.' +
-          'Please run convert_landice_bitmasks.py and try again')
-    thk = dataset.variables["thickness"][:] * ( dataset.variables["cellMask"][:] & 2 )//2
-    speed = dataset.variables["surfaceSpeed"][:] * ( dataset.variables["cellMask"][:] & 2 )//2 * 3600. * 24. * 365.
+    speed = np.sqrt(dataset.variables["uReconstructX"][:,:,0]**2. + 
+                    dataset.variables["uReconstructY"][:,:,0]**2.) * cellMask_dynamicIce * 3600. * 24. * 365.
+
+temperature = dataset.variables['temperature'][:]
     
 bedTopo = dataset.variables["bedTopography"][0,:]
+
 startYear = 2007
-time = dataset.variables["daysSinceStart"][:] / 365. + startYear
-time=time[0:11]
-thk = thk*(thk<5e3)
+if "daysSinceStart" in dataset.variables.keys():
+    time = dataset.variables["daysSinceStart"][:] / 365. + startYear
+else:
+    time = range(dataset.dimensions['Time'].size)
 
 coords = []
 x = []
@@ -55,8 +65,12 @@ with open(options.coords_file, newline='') as csvfile:
          x.append(float(row[0]))
          y.append(float(row[1]))
 
-xArray = np.array(x)
-yArray= np.array(y)
+# increase sampling by a factor of 100
+x_interp = np.interp(np.linspace(0, len(x)-1, 100*len(x)), np.linspace(0, len(x)-1, len(x)), x)
+y_interp = np.interp(np.linspace(0, len(y)-1, 100*len(y)), np.linspace(0, len(y)-1, len(y)), y)
+
+xArray = np.array(x_interp)
+yArray= np.array(y_interp)
 
 d_distance = np.zeros(len(xArray))
 for ii in np.arange(1, len(xArray)):
@@ -64,7 +78,7 @@ for ii in np.arange(1, len(xArray)):
 
 distance = np.cumsum(d_distance)
 
-transectFig, transectAx = plt.subplots(2,1)
+transectFig, transectAx = plt.subplots(2,1, sharex=True, layout='constrained')
 thickAx = transectAx[0]
 thickAx.grid()
 speedAx = transectAx[1]
@@ -80,31 +94,48 @@ for timeSlice in np.arange(0, len(time)):
 
     thk_interpolant = LinearNDInterpolator(np.vstack((xCell, yCell)).T, thk[timeSlice,:])
     thk_transect = thk_interpolant(np.vstack((xArray, yArray)).T)
-    thk_transect[(thk_transect + bed_transect) < 1.] = 0.0
-    thickAx.plot( (distance[-1]-distance)/1000., thk_transect + bed_transect, color=timeColors[timeSlice])
+    lower_surf = np.maximum( -910. / 1028. * thk_transect, bed_transect)
+    lower_surf_nan = lower_surf.copy()  # for plotting
+    lower_surf_nan[thk_transect==0.] = np.nan
+    upper_surf = lower_surf + thk_transect
+    upper_surf_nan = upper_surf.copy()  # for plotting
+    upper_surf_nan[thk_transect==0.] = np.nan
+    thickAx.plot( (distance[-1]-distance)/1000., lower_surf_nan, color=timeColors[timeSlice])
+    thickAx.plot( (distance[-1]-distance)/1000., upper_surf_nan, color=timeColors[timeSlice])
     
     speed_interpolant = LinearNDInterpolator(np.vstack((xCell, yCell)).T, speed[timeSlice,:])
     speed_transect = speed_interpolant(np.vstack((xArray, yArray)).T)
-
-    speed_transect[speed_transect==0] = np.nan
     speed_transect[thk_transect == 0.] = np.nan
     speedAx.plot( (distance[-1]-distance)/1000. , speed_transect, color=timeColors[timeSlice])
-    
+
+    if options.interp_temp:
+        layer_thk = np.zeros((len(thk_transect), nVertLevels + 1))
+        layer_midpoints = np.zeros((len(thk_transect), nVertLevels))
+        layer_thk[:,0] = 0.
+        for i in range(len(thk_transect)):
+            layer_thk[i,1:] = np.cumsum(layerThicknessFractions * thk_transect[i])
+            layer_midpoints[i,:] = upper_surf[i] - (layer_thk[i,1:] + layer_thk[i,0:-1]) / 2.
+
+        temp_transect = np.zeros((len(xArray), nVertLevels))
+        for lev in range(nVertLevels):
+            print(f'Interpolating temperature for level {lev}')
+            temp_interpolant = LinearNDInterpolator(np.vstack((xCell, yCell)).T, temperature[timeSlice,:,lev])
+            temp_transect[:, lev] = temp_interpolant(np.vstack((xArray, yArray)).T)
+
 thickAx.plot( (distance[-1]-distance)/1000., bed_transect, color='black')
+
+if options.interp_temp:
+    temp_transect[temp_transect == 0.] = np.nan
+    temp_plot = thickAx.pcolormesh( np.tile( (distance[-1]-distance)/1000., (nVertLevels,1)).T,
+                                    layer_midpoints[:,:], temp_transect[:,:], cmap='YlGnBu_r', vmin=240., vmax=273.15)
 
 speedAx.set_xlabel('Distance (km)')
 speedAx.set_ylabel('Surface\nspeed (m/yr)')
-speedAx.set_xlim((0,35))
-speedAx.set_ylim((0, 1000))
 thickAx.set_ylabel('Elevation\n(m asl)')
-thickAx.set_xlim((0,35))
 transectFig.subplots_adjust(hspace=0.4)
 
-cbar = plt.colorbar(cm.ScalarMappable(cmap='plasma'), ax=transectAx)
-cbar.set_ticks(np.linspace(0,1,6))
-cbar.set_label('Year', size='large')
-years = str(time).lstrip('[').rstrip(']').split()
-cbar.set_ticklabels(years[0::len(years)//5])
+cbar = plt.colorbar(temp_plot)
+cbar.set_label('Temperature (K)')
 cbar.ax.tick_params(labelsize=12)
 
 plt.show()
