@@ -62,15 +62,15 @@ if options.interp_temp and (len(times) > 1):
 li_mask_ValueDynamicIce = 2
 cellMask = dataset.variables['cellMask'][:]
 cellMask_dynamicIce = (cellMask & li_mask_ValueDynamicIce) // li_mask_ValueDynamicIce
-# only take thickness, speed, and temperature of dynamic ice
+# only take thickness of dynamic ice
 thk = dataset.variables["thickness"][:] * cellMask_dynamicIce
+# Include speed on non-dynamic ice to avoid interpolation artifacts.
 if "surfaceSpeed" in dataset.variables.keys():
-    speed = dataset.variables["surfaceSpeed"][:] * \
-            cellMask_dynamicIce * 3600. * 24. * 365.
+    speed = dataset.variables["surfaceSpeed"][:] * 3600. * 24. * 365.
 else:
     speed = np.sqrt(dataset.variables["uReconstructX"][:,:,0]**2. + 
-                    dataset.variables["uReconstructY"][:,:,0]**2.) * \
-            cellMask_dynamicIce * 3600. * 24. * 365.
+                    dataset.variables["uReconstructY"][:,:,0]**2.)
+    speed *= 3600. * 24. * 365.  # convert from m/s to m/yr
 
 if options.interp_temp:
     temperature = dataset.variables['temperature'][:]
@@ -78,7 +78,7 @@ if options.interp_temp:
 bedTopo = dataset.variables["bedTopography"][0,:]
 
 # Use coordinates from CSV file or -x -y options, but not both.
-# CSV file takes precedent if both are present
+# CSV file takes precedent if both are present.
 if options.coords_file is not None:
     x = []
     y = []
@@ -96,13 +96,10 @@ else:
     y = [float(i) for i in options.y_coords.split(',')]
 
 # increase sampling by a factor of 100
-x_interp = np.interp(np.linspace(0, len(x)-1, 100*len(x)),
+xArray = np.interp(np.linspace(0, len(x)-1, 100*len(x)),
                      np.linspace(0, len(x)-1, len(x)), x)
-y_interp = np.interp(np.linspace(0, len(y)-1, 100*len(y)),
+yArray = np.interp(np.linspace(0, len(y)-1, 100*len(y)),
                      np.linspace(0, len(y)-1, len(y)), y)
-
-xArray = np.array(x_interp)
-yArray= np.array(y_interp)
 
 d_distance = np.zeros(len(xArray))
 for ii in np.arange(1, len(xArray)):
@@ -122,7 +119,6 @@ plt.rcParams.update({'font.size': 16})
 
 bed_interpolant = LinearNDInterpolator(np.vstack((xCell, yCell)).T, bedTopo)
 bed_transect = bed_interpolant(np.vstack((xArray, yArray)).T)
-speed_plots = []
 
 for i, time in enumerate(times):
     thk_interpolant = LinearNDInterpolator(
@@ -141,8 +137,7 @@ for i, time in enumerate(times):
                             np.vstack((xCell, yCell)).T, speed[time,:])
     speed_transect = speed_interpolant(np.vstack((xArray, yArray)).T)
     speed_transect[thk_transect == 0.] = np.nan
-    speed_plots.append(speedAx.plot(distance, speed_transect,
-                                    color=timeColors[i]))
+    speedAx.plot(distance, speed_transect, color=timeColors[i])
 
     if options.interp_temp:
         layer_thk = np.zeros((len(thk_transect), nVertLevels + 1))
