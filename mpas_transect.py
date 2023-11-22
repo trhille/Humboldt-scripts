@@ -121,10 +121,12 @@ for i, time in enumerate(times):
     if options.interp_temp:
         layer_thk = np.zeros((len(thk_transect), nVertLevels + 1))
         layer_midpoints = np.zeros((len(thk_transect), nVertLevels))
+        layer_interfaces = np.zeros((len(thk_transect), nVertLevels + 1))
         layer_thk[:,0] = 0.
-        for i in range(len(thk_transect)):
-            layer_thk[i,1:] = np.cumsum(layerThicknessFractions * thk_transect[i])
-            layer_midpoints[i,:] = upper_surf[i] - (layer_thk[i,1:] + layer_thk[i,0:-1]) / 2.
+        for ii in range(len(thk_transect)):
+            layer_thk[ii,1:] = np.cumsum(layerThicknessFractions * thk_transect[ii])
+            layer_midpoints[i,:] = upper_surf[ii] - (layer_thk[ii,1:] + layer_thk[ii,0:-1]) / 2.
+            layer_interfaces[ii,:] = upper_surf[ii] - layer_thk[ii,:]
 
         temp_transect = np.zeros((len(xArray), nVertLevels))
         for lev in range(nVertLevels):
@@ -136,8 +138,8 @@ thickAx.plot( (distance[-1]-distance)/1000., bed_transect, color='black')
 
 if options.interp_temp:
     temp_transect[temp_transect == 0.] = np.nan
-    temp_plot = thickAx.pcolormesh( np.tile( (distance[-1]-distance)/1000., (nVertLevels,1)).T,
-                                    layer_midpoints[:,:], temp_transect[:,:], cmap='YlGnBu_r',
+    temp_plot = thickAx.pcolormesh( np.tile( (distance[-1]-distance)/1000., (nVertLevels+1,1)).T,
+                                    layer_interfaces[:,:], temp_transect[1:,:], cmap='YlGnBu_r',
                                     vmin=240., vmax=273.15)
 
 speedAx.set_xlabel('Distance (km)')
